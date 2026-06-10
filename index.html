@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v23 Operativa</title>
+  <title>CRM F.P. Consulting v24 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -127,6 +127,8 @@
       padding:12px; display:flex; gap:10px; align-items:flex-start; margin-bottom:8px;
     }
     .task strong { display:block; margin-bottom:3px; }
+    .task.clickable { cursor:pointer; transition:.15s ease; }
+    .task.clickable:hover { background:#fff7f7; border-color:#fecaca; transform:translateY(-1px); }
     .modal-backdrop {
       position:fixed; inset:0; z-index:60; background:rgba(15,23,42,.45);
       display:flex; align-items:center; justify-content:center; padding:18px;
@@ -193,7 +195,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v23 Operativa</div>
+          <div>CRM F.P. Consulting v24 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -762,7 +764,13 @@ function renderDashboardLists() {
   const todayApps = appointments.filter(a => localDateKey(a.appointment_date) === today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
   document.getElementById("todayAppointmentsBox").innerHTML = todayApps.map(a => {
     const l = leadById(a.lead_id);
-    return `<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(l?.name || "")}</strong><div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div></div><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button><button class="small good" onclick="openSaleModal('${a.lead_id}', '${a.id}')">Vendita</button></div>`;
+    return `<div class="task clickable" onclick="openAppointmentEditModal('${a.id}')" title="Apri appuntamento">
+      <span class="pill blue">Appuntamento</span>
+      <div style="flex:1">
+        <strong>${fmtTime(a.appointment_date)} • ${escapeHtml(l?.name || "")}</strong>
+        <div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div>
+      </div>
+    </div>`;
   }).join("") || `<p class="muted">Nessun appuntamento oggi.</p>`;
 
   const allDue = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status));
