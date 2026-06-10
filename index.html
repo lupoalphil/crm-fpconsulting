@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v33 Multiutente</title>
+  <title>CRM F.P. Consulting v34 Multiutente</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -26,8 +26,21 @@
       border-bottom:1px solid var(--line);
     }
     .wrap { max-width:1380px; margin:0 auto; padding:15px 18px; }
-    .top { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
-    .logo { display:flex; align-items:center; gap:12px; font-weight:950; }
+    .top {
+      display:grid;
+      grid-template-columns:minmax(280px,1fr) auto;
+      align-items:start;
+      gap:14px;
+    }
+    .top-actions {
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      max-width:820px;
+    }
+    .logo { display:flex; align-items:center; gap:12px; font-weight:950; min-width:0; }
     .mark {
       width:46px; height:46px; border-radius:14px;
       background:linear-gradient(135deg,var(--brand),#7f1d1d);
@@ -91,6 +104,24 @@
       padding:5px 9px; font-size:12px; font-weight:850;
       border:1px solid var(--line); background:#fff; white-space:nowrap;
     }
+    .account-wrap { position:relative; display:inline-flex; }
+    .account-button {
+      display:inline-flex; align-items:center; gap:8px; border-radius:999px;
+      padding:8px 11px; background:#fff; color:var(--ink);
+      border:1px solid var(--line); font-weight:900; cursor:pointer;
+      max-width:260px;
+    }
+    .account-button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .account-menu {
+      position:absolute; right:0; top:calc(100% + 8px); z-index:90;
+      width:270px; background:#fff; border:1px solid var(--line);
+      border-radius:16px; box-shadow:0 18px 48px rgba(15,23,42,.18);
+      padding:10px;
+    }
+    .account-menu .account-title { font-weight:950; margin-bottom:3px; }
+    .account-menu .account-email { font-size:12px; color:var(--muted); word-break:break-word; margin-bottom:10px; }
+    .account-menu button { width:100%; justify-content:flex-start; text-align:left; margin-top:6px; }
+    .account-menu .menu-sep { height:1px; background:var(--line); margin:8px 0; }
     .pill.good { color:var(--good); background:#f0fdf4; border-color:#bbf7d0; }
     .pill.bad { color:var(--bad); background:#fef2f2; border-color:#fecaca; }
     .pill.warn { color:var(--warn); background:#fffbeb; border-color:#fde68a; }
@@ -216,6 +247,9 @@
       .month-row { grid-template-columns:1fr; }
       .year-row { grid-template-columns:1fr; }
       .perm-grid { grid-template-columns:1fr; }
+      .top { grid-template-columns:1fr; }
+      .top-actions { justify-content:flex-start; max-width:100%; }
+      .account-button { max-width:100%; }
     }
   </style>
 </head>
@@ -226,13 +260,29 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v33 Multiutente</div>
+          <div>CRM F.P. Consulting v34 Multiutente</div>
           <div class="sub">CRM multiutente con ruoli, team, assegnazioni, export e permessi Supabase</div>
         </div>
       </div>
-      <div class="row">
+      <div class="top-actions">
         <span class="pill blue" id="connPill">Supabase collegato</span>
-        <span class="pill" id="userPill">Non loggato</span>
+
+        <div class="account-wrap hidden" id="accountWrap">
+          <button class="account-button" type="button" onclick="toggleAccountMenu()">
+            <span id="userPill">Non loggato</span>
+            <span class="mini">▾</span>
+          </button>
+          <div class="account-menu hidden" id="accountMenu">
+            <div class="account-title" id="accountMenuName">Profilo</div>
+            <div class="account-email" id="accountMenuEmail"></div>
+            <span class="pill warn" id="accountMenuRole">Ruolo</span>
+            <div class="menu-sep"></div>
+            <button class="ghost small" onclick="openProfileMenu()">Profilo</button>
+            <button class="ghost small" onclick="showPanel('usersPanel'); closeAccountMenu()">Utenti e permessi</button>
+            <button class="bad small" onclick="logout()">Esci</button>
+          </div>
+        </div>
+
         <span class="pill warn hidden" id="rolePill">Ruolo</span>
         <button class="ghost small hidden" id="moneyBtn" onclick="toggleMoneyPrivacy()">Privacy importi: OFF</button>
         <button class="ghost small hidden" id="refreshBtn" onclick="refreshAll()">Aggiorna</button>
@@ -985,6 +1035,44 @@ async function toggleMembership(id, active) {
   await refreshAll();
 }
 
+
+function toggleAccountMenu() {
+  const menu = document.getElementById("accountMenu");
+  if (!menu) return;
+  menu.classList.toggle("hidden");
+}
+function closeAccountMenu() {
+  const menu = document.getElementById("accountMenu");
+  if (menu) menu.classList.add("hidden");
+}
+function openProfileMenu() {
+  closeAccountMenu();
+  const roleText = currentProfile ? roleLabel(currentProfile.global_role) : "Ruolo non caricato";
+  openModal("Profilo utente", `
+    <div class="notice">
+      <strong>${escapeHtml(currentProfile?.display_name || currentUser?.email || "Profilo")}</strong><br>
+      ${escapeHtml(currentUser?.email || "")}
+    </div>
+    <div class="detail-grid" style="margin-top:12px">
+      <div><strong>Ruolo globale</strong>${escapeHtml(roleText)}</div>
+      <div><strong>Account attivo</strong>${currentProfile?.active === false ? "No" : "Sì"}</div>
+      <div><strong>User ID</strong>${escapeHtml(currentUser?.id || "")}</div>
+      <div><strong>Email</strong>${escapeHtml(currentUser?.email || "")}</div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="blue" onclick="showPanel('usersPanel'); closeModal()">Utenti e permessi</button>
+      <button class="bad" onclick="logout()">Esci</button>
+      <button class="ghost" onclick="closeModal()">Chiudi</button>
+    </div>
+  `);
+}
+document.addEventListener("click", function(ev) {
+  const wrap = document.getElementById("accountWrap");
+  const menu = document.getElementById("accountMenu");
+  if (!wrap || !menu || menu.classList.contains("hidden")) return;
+  if (!wrap.contains(ev.target)) closeAccountMenu();
+});
+
 async function init() {
   const remembered = localStorage.getItem("crm_fp_email");
   if (remembered) {
@@ -998,12 +1086,26 @@ async function init() {
 }
 function renderAuth() {
   const logged = !!currentUser;
-  document.getElementById("userPill").textContent = logged ? "Login: " + currentUser.email : "Non loggato";
+  const userPill = document.getElementById("userPill");
+  if (userPill) userPill.textContent = logged ? (currentProfile?.display_name || currentUser.email || "Account") : "Non loggato";
+
+  const accountWrap = document.getElementById("accountWrap");
+  if (accountWrap) accountWrap.classList.toggle("hidden", !logged);
+
+  const roleText = currentProfile ? roleLabel(currentProfile.global_role) : "Ruolo non caricato";
   const rolePill = document.getElementById("rolePill");
   if (rolePill) {
-    rolePill.textContent = currentProfile ? roleLabel(currentProfile.global_role) : "Ruolo non caricato";
+    rolePill.textContent = roleText;
     rolePill.classList.toggle("hidden", !logged);
   }
+
+  const accountMenuName = document.getElementById("accountMenuName");
+  const accountMenuEmail = document.getElementById("accountMenuEmail");
+  const accountMenuRole = document.getElementById("accountMenuRole");
+  if (accountMenuName) accountMenuName.textContent = currentProfile?.display_name || "Profilo";
+  if (accountMenuEmail) accountMenuEmail.textContent = currentUser?.email || "";
+  if (accountMenuRole) accountMenuRole.textContent = roleText;
+
   document.getElementById("authSection").classList.toggle("hidden", logged);
   document.getElementById("appSection").classList.toggle("hidden", !logged);
   document.getElementById("navTabs").classList.toggle("hidden", !logged);
@@ -1040,6 +1142,7 @@ async function magicLink() {
   toast("Magic link inviato");
 }
 async function logout() {
+  closeAccountMenu();
   await sb.auth.signOut();
   currentUser = null;
   currentProfile = null; profiles = []; teams = []; memberships = []; accessContextReady = false; leads = []; calls = []; appointments = []; sales = []; saleItems = []; selectedLead = null;
