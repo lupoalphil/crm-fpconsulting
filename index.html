@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v36 Multiutente</title>
+  <title>CRM F.P. Consulting v37 Multiutente</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -276,7 +276,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v36 Multiutente</div>
+          <div>CRM F.P. Consulting v37 Multiutente</div>
           <div class="sub">CRM multiutente con ruoli, team, assegnazioni, export e permessi Supabase</div>
         </div>
       </div>
@@ -404,6 +404,7 @@
             <button class="blue" onclick="openCallModal()">Nuova chiamata</button>
             <button class="brand" onclick="openAppointmentModal()">Nuovo appuntamento</button>
             <button class="good" onclick="openSaleModal()">Nuova vendita</button>
+            <button class="ghost" onclick="clearLeadSelection()">Pulisci lead</button>
           </div>
         </div>
         <div class="card">
@@ -1554,6 +1555,19 @@ function selectLead(id) {
   showPanel("leadsPanel");
   renderSelectedLead();
 }
+
+function clearLeadSelection() {
+  selectedLead = null;
+  const search = document.getElementById("leadSearch");
+  const box = document.getElementById("leadSuggestions");
+  if (search) search.value = "";
+  if (box) {
+    box.innerHTML = "";
+    box.classList.add("hidden");
+  }
+  renderSelectedLead();
+  toast("Scheda lead pulita");
+}
 function renderLeadTable() {
   const rows = leads.slice(0, leadLimit).map(l => `
     <tr>
@@ -1594,9 +1608,9 @@ function renderSelectedLead() {
   if (!selectedLead) {
     if (box) box.classList.add("hidden");
     if (detail) detail.innerHTML = `<span class="muted">Seleziona un lead per vedere dettagli e storico.</span>`;
-    if (leadCalls) leadCalls.innerHTML = `<tr><td colspan="3" class="muted">Nessun lead selezionato.</td></tr>`;
-    if (leadApps) leadApps.innerHTML = `<tr><td colspan="3" class="muted">Nessun lead selezionato.</td></tr>`;
-    if (leadSales) leadSales.innerHTML = `<tr><td colspan="3" class="muted">Nessun lead selezionato.</td></tr>`;
+    if (leadCalls) leadCalls.innerHTML = `<tr><td colspan="4" class="muted">Nessun lead selezionato.</td></tr>`;
+    if (leadApps) leadApps.innerHTML = `<tr><td colspan="4" class="muted">Nessun lead selezionato.</td></tr>`;
+    if (leadSales) leadSales.innerHTML = `<tr><td colspan="4" class="muted">Nessun lead selezionato.</td></tr>`;
     return;
   }
   box.innerHTML = `<strong>${escapeHtml(selectedLead.name)}</strong><br>Telefono: ${escapeHtml(selectedLead.phone || "")}<br>Codice cliente: ${escapeHtml(selectedLead.customer_id || "")}<br>Lista: ${escapeHtml(selectedLead.list_name || "")}<br>Interesse: ${escapeHtml(selectedLead.interest || "")}`;
@@ -2232,53 +2246,101 @@ function productOptions(selected="") {
 
 function openCallModal(leadId=null) {
   const l = requireLead(leadId); if (!l) return;
-  openModal("Nuova chiamata", `
+  const outcomes = ["Non risponde","Richiamare","Interessato","Appuntamento fissato","Proposta inviata","Venduto","Non interessato","Numero errato"];
+  const statuses = ["Contattato","Da chiamare","Interessato","Appuntamento fissato","Proposta inviata","Venduto","Non interessato"];
+  openModal("Nuova chiamata / azioni successive", `
     <div class="notice"><strong>${escapeHtml(l.name)}</strong><br>${escapeHtml(l.phone || "")} • ${escapeHtml(l.customer_id || "")}</div>
     <div class="form-grid" style="margin-top:12px">
-      <div><label>Data/ora</label><input id="mCallDate" type="datetime-local" value="${nowLocalInput()}"></div>
-      <div><label>Esito</label><select id="mCallOutcome" onchange="autoCallOutcome()"><option>Non risponde</option><option>Richiamare</option><option>Interessato</option><option>Appuntamento fissato</option><option>Proposta inviata</option><option>Venduto</option><option>Non interessato</option><option>Numero errato</option></select></div>
+      <div><label>Data/ora chiamata</label><input id="mCallDate" type="datetime-local" value="${nowLocalInput()}"></div>
+      <div><label>Esito</label><select id="mCallOutcome" onchange="autoCallOutcome()">${outcomes.map(o => `<option>${escapeHtml(o)}</option>`).join("")}</select></div>
       <div><label>Nuovo follow-up</label><input id="mCallNext" type="datetime-local"></div>
-      <div><label>Nuovo stato lead</label><select id="mCallStatus"><option>Contattato</option><option>Da chiamare</option><option>Interessato</option><option>Appuntamento fissato</option><option>Proposta inviata</option><option>Venduto</option><option>Non interessato</option></select></div>
-      <div class="span4"><label><input id="mCallCreateApp" type="checkbox" style="width:auto" onchange="toggleCallAppBox()"> Crea appuntamento da questa chiamata</label></div>
+      <div><label>Stato lead</label><select id="mCallStatus">${statuses.map(s => `<option>${escapeHtml(s)}</option>`).join("")}</select></div>
+
+      <div class="span4">
+        <label><input id="mCallCreateApp" type="checkbox" style="width:auto" onchange="toggleCallAppBox()"> Crea appuntamento da questa chiamata</label>
+      </div>
+
       <div id="mCallAppBox" class="span4 hidden">
+        <div class="notice" style="margin-bottom:10px">
+          <strong>Dati appuntamento</strong><br>
+          Dopo il salvataggio si aprirà direttamente la scheda appuntamento per completare o correggere i dettagli.
+        </div>
         <div class="form-grid">
           <div><label>Data appuntamento</label><input id="mCallAppDate" type="datetime-local" value="${nowLocalInput()}"></div>
           <div><label>Tipo</label><select id="mCallAppType"><option>In ufficio</option><option>Telefonico</option><option>Videochiamata</option><option>Dal cliente</option></select></div>
           <div class="span2"><label>Luogo</label><input id="mCallAppPlace"></div>
         </div>
       </div>
-      <div class="span4"><label>Note</label><textarea id="mCallNotes"></textarea></div>
-      <div class="span4 row"><button class="blue" onclick="saveCallFromModal('${l.id}')">Salva chiamata</button></div>
+
+      <div class="span4">
+        <label><input id="mCallOpenSale" type="checkbox" style="width:auto"> Apri vendita dopo il salvataggio</label>
+      </div>
+
+      <div class="span4"><label>Note chiamata</label><textarea id="mCallNotes"></textarea></div>
+
+      <div class="span4 row">
+        <button class="blue" onclick="saveCallFromModal('${l.id}')">Salva chiamata</button>
+        <button class="brand" onclick="saveCallFromModal('${l.id}', true, false)">Salva e crea appuntamento</button>
+        <button class="good" onclick="saveCallFromModal('${l.id}', false, true)">Salva e apri vendita</button>
+        <button class="ghost" onclick="closeModal()">Annulla</button>
+      </div>
     </div>`);
 }
+
 function autoCallOutcome() {
   const outcome = document.getElementById("mCallOutcome").value;
   const st = document.getElementById("mCallStatus");
   const cb = document.getElementById("mCallCreateApp");
-  if (outcome === "Appuntamento fissato") { st.value = "Appuntamento fissato"; cb.checked = true; }
-  else if (outcome === "Interessato") st.value = "Interessato";
-  else if (outcome === "Venduto") st.value = "Venduto";
-  else if (outcome === "Non interessato") st.value = "Non interessato";
+  const saleCb = document.getElementById("mCallOpenSale");
+  if (outcome === "Appuntamento fissato") {
+    st.value = "Appuntamento fissato";
+    cb.checked = true;
+  } else if (outcome === "Interessato") st.value = "Interessato";
+  else if (outcome === "Venduto") {
+    st.value = "Venduto";
+    saleCb.checked = true;
+  } else if (outcome === "Non interessato") st.value = "Non interessato";
+  else if (outcome === "Richiamare" || outcome === "Non risponde") st.value = "Da chiamare";
   toggleCallAppBox();
 }
+
 function toggleCallAppBox() {
-  document.getElementById("mCallAppBox").classList.toggle("hidden", !document.getElementById("mCallCreateApp").checked);
+  const box = document.getElementById("mCallAppBox");
+  const cb = document.getElementById("mCallCreateApp");
+  if (box && cb) box.classList.toggle("hidden", !cb.checked);
 }
-async function saveCallFromModal(leadId) {
+
+async function saveCallFromModal(leadId, forceAppointment=false, forceSale=false) {
+  const wantsSale = forceSale || !!document.getElementById("mCallOpenSale")?.checked;
+  const wantsAppointment = !wantsSale && (forceAppointment || !!document.getElementById("mCallCreateApp")?.checked);
+
+  let outcome = document.getElementById("mCallOutcome").value;
+  let newStatus = document.getElementById("mCallStatus").value;
+
+  if (wantsSale) {
+    outcome = "Venduto";
+    newStatus = "Venduto";
+  } else if (wantsAppointment) {
+    outcome = "Appuntamento fissato";
+    newStatus = "Appuntamento fissato";
+  }
+
   const call = {
     id:id("call"), user_id:currentUser.id, lead_id:leadId,
     call_date:toIsoOrNull(document.getElementById("mCallDate").value),
     duration:0,
-    outcome:document.getElementById("mCallOutcome").value,
-    new_status:document.getElementById("mCallStatus").value,
+    outcome,
+    new_status:newStatus,
     next_follow_up:toIsoOrNull(document.getElementById("mCallNext").value),
     notes:document.getElementById("mCallNotes").value.trim()
   };
+
   const { error } = await sb.from("calls").insert(call);
   if (error) return toast(error.message);
-  await updateLeadAfterActivity(leadId, call.new_status, call.next_follow_up);
-  let createdAppointment = false;
-  if (document.getElementById("mCallCreateApp").checked) {
+
+  let createdAppointmentId = null;
+
+  if (wantsAppointment) {
     const app = {
       id:id("app"), user_id:currentUser.id, lead_id:leadId,
       appointment_date:toIsoOrNull(document.getElementById("mCallAppDate").value),
@@ -2289,15 +2351,30 @@ async function saveCallFromModal(leadId) {
     };
     const appRes = await sb.from("appointments").insert(app);
     if (appRes.error) return toast(appRes.error.message);
-    createdAppointment = true;
+    createdAppointmentId = app.id;
     await updateLeadAfterActivity(leadId, "Appuntamento fissato", app.appointment_date);
+  } else {
+    await updateLeadAfterActivity(leadId, call.new_status, call.next_follow_up);
   }
+
   closeModal();
   await refreshAll();
   selectLead(leadId);
-  toast(createdAppointment ? "Chiamata e appuntamento salvati" : "Chiamata salvata");
-}
 
+  if (createdAppointmentId) {
+    toast("Chiamata salvata e appuntamento creato");
+    openAppointmentEditModal(createdAppointmentId);
+    return;
+  }
+
+  if (wantsSale) {
+    toast("Chiamata salvata: vendita pronta");
+    openSaleModal(leadId);
+    return;
+  }
+
+  toast("Chiamata salvata");
+}
 
 function openCallEditModal(callId) {
   const call = calls.find(c => c.id === callId);
@@ -2316,6 +2393,10 @@ function openCallEditModal(callId) {
 
       <div class="span4"><label><input id="eCallCreateApp" type="checkbox" style="width:auto" onchange="toggleEditCallAppBox()"> Crea appuntamento da questa chiamata</label></div>
       <div id="eCallAppBox" class="span4 hidden">
+        <div class="notice" style="margin-bottom:10px">
+          <strong>Dati appuntamento</strong><br>
+          Dopo il salvataggio si aprirà direttamente la scheda appuntamento.
+        </div>
         <div class="form-grid">
           <div><label>Data appuntamento</label><input id="eCallAppDate" type="datetime-local" value="${nowLocalInput()}"></div>
           <div><label>Tipo</label><select id="eCallAppType"><option>In ufficio</option><option>Telefonico</option><option>Videochiamata</option><option>Dal cliente</option></select></div>
@@ -2323,10 +2404,13 @@ function openCallEditModal(callId) {
         </div>
       </div>
 
+      <div class="span4"><label><input id="eCallOpenSale" type="checkbox" style="width:auto" ${call.outcome === "Venduto" ? "checked" : ""}> Apri vendita dopo il salvataggio</label></div>
+
       <div class="span4"><label>Note chiamata</label><textarea id="eCallNotes">${escapeHtml(call.notes || "")}</textarea></div>
       <div class="span4 row">
         <button class="blue" onclick="saveCallUpdate('${call.id}')">Salva aggiornamento chiamata</button>
-        <button class="brand" onclick="saveCallUpdate('${call.id}', true)">Salva e crea appuntamento</button>
+        <button class="brand" onclick="saveCallUpdate('${call.id}', true, false)">Salva e crea appuntamento</button>
+        <button class="good" onclick="saveCallUpdate('${call.id}', false, true)">Salva e apri vendita</button>
         <button class="bad" onclick="deleteCall('${call.id}')">Elimina chiamata</button>
         <button class="ghost" onclick="closeModal()">Chiudi</button>
       </div>
@@ -2338,30 +2422,39 @@ function autoEditCallOutcome() {
   const outcome = document.getElementById("eCallOutcome").value;
   const status = document.getElementById("eCallStatus");
   const cb = document.getElementById("eCallCreateApp");
+  const saleCb = document.getElementById("eCallOpenSale");
   if (outcome === "Appuntamento fissato") {
     status.value = "Appuntamento fissato";
     cb.checked = true;
   } else if (outcome === "Interessato") status.value = "Interessato";
-  else if (outcome === "Venduto") status.value = "Venduto";
-  else if (outcome === "Non interessato") status.value = "Non interessato";
-  else if (outcome === "Richiamare") status.value = "Da chiamare";
-  else if (outcome === "Non risponde") status.value = "Da chiamare";
+  else if (outcome === "Venduto") {
+    status.value = "Venduto";
+    saleCb.checked = true;
+  } else if (outcome === "Non interessato") status.value = "Non interessato";
+  else if (outcome === "Richiamare" || outcome === "Non risponde") status.value = "Da chiamare";
   toggleEditCallAppBox();
 }
 
 function toggleEditCallAppBox() {
-  document.getElementById("eCallAppBox").classList.toggle("hidden", !document.getElementById("eCallCreateApp").checked);
+  const box = document.getElementById("eCallAppBox");
+  const cb = document.getElementById("eCallCreateApp");
+  if (box && cb) box.classList.toggle("hidden", !cb.checked);
 }
 
-async function saveCallUpdate(callId, forceAppointment=false) {
+async function saveCallUpdate(callId, forceAppointment=false, forceSale=false) {
   const call = calls.find(c => c.id === callId);
   if (!call) return toast("Chiamata non trovata");
 
-  const wantsAppointment = forceAppointment || !!document.getElementById("eCallCreateApp")?.checked;
+  const wantsSale = forceSale || !!document.getElementById("eCallOpenSale")?.checked;
+  const wantsAppointment = !wantsSale && (forceAppointment || !!document.getElementById("eCallCreateApp")?.checked);
+
   let outcome = document.getElementById("eCallOutcome").value;
   let newStatus = document.getElementById("eCallStatus").value;
 
-  if (wantsAppointment && outcome !== "Appuntamento fissato") {
+  if (wantsSale) {
+    outcome = "Venduto";
+    newStatus = "Venduto";
+  } else if (wantsAppointment) {
     outcome = "Appuntamento fissato";
     newStatus = "Appuntamento fissato";
   }
@@ -2377,7 +2470,8 @@ async function saveCallUpdate(callId, forceAppointment=false) {
   const { error } = await sb.from("calls").update(patch).eq("id", callId);
   if (error) return toast(error.message);
 
-  let createdAppointment = false;
+  let createdAppointmentId = null;
+
   if (wantsAppointment) {
     const app = {
       id:id("app"), user_id:currentUser.id, lead_id:call.lead_id,
@@ -2389,7 +2483,7 @@ async function saveCallUpdate(callId, forceAppointment=false) {
     };
     const appRes = await sb.from("appointments").insert(app);
     if (appRes.error) return toast(appRes.error.message);
-    createdAppointment = true;
+    createdAppointmentId = app.id;
     await updateLeadAfterActivity(call.lead_id, "Appuntamento fissato", app.appointment_date);
   } else {
     await updateLeadAfterActivity(call.lead_id, patch.new_status, patch.next_follow_up);
@@ -2398,7 +2492,20 @@ async function saveCallUpdate(callId, forceAppointment=false) {
   closeModal();
   await refreshAll();
   selectLead(call.lead_id);
-  toast(createdAppointment ? "Chiamata aggiornata e appuntamento creato" : "Chiamata aggiornata");
+
+  if (createdAppointmentId) {
+    toast("Chiamata aggiornata e appuntamento creato");
+    openAppointmentEditModal(createdAppointmentId);
+    return;
+  }
+
+  if (wantsSale) {
+    toast("Chiamata aggiornata: vendita pronta");
+    openSaleModal(call.lead_id);
+    return;
+  }
+
+  toast("Chiamata aggiornata");
 }
 
 async function deleteCall(callId) {
