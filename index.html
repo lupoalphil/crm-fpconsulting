@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v30 Operativa</title>
+  <title>CRM F.P. Consulting v31 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -107,6 +107,10 @@
     th { color:#4b5563; font-size:12px; text-transform:uppercase; letter-spacing:.04em; background:#fafafa; }
     tr:hover td { background:#fff7f7; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:14px; }
+    .table-wrap.scroll-list { max-height:520px; overflow:auto; }
+    .table-wrap.scroll-list thead th { position:sticky; top:0; z-index:1; }
+    .activity-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    @media(max-width:1200px) { .activity-grid { grid-template-columns:1fr; } }
     .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; }
     .detail-grid div { border-bottom:1px solid var(--line); padding:7px 0; }
     .detail-grid strong { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
@@ -217,7 +221,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v30 Operativa</div>
+          <div>CRM F.P. Consulting v31 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -456,14 +460,30 @@
     </div>
 
     <div id="activitiesPanel" class="panel">
-      <div class="grid cols2">
+      <div class="activity-grid">
         <div class="card">
-          <h2>Ultime chiamate</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Note</th><th>Azione</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
+          <div class="row">
+            <h2 style="margin:0">Chiamate</h2>
+            <span class="pill blue right">prime 10 attive + storico</span>
+          </div>
+          <p class="mini">Prima le chiamate più operative: richiamare, interessati, appuntamenti fissati, follow-up aperti. Lista scrollabile.</p>
+          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Note</th><th>Azione</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
         </div>
         <div class="card">
-          <h2>Ultimi appuntamenti</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Luogo</th><th>Azione</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
+          <div class="row">
+            <h2 style="margin:0">Appuntamenti</h2>
+            <span class="pill blue right">aperti prima</span>
+          </div>
+          <p class="mini">Prima gli appuntamenti da fare/rinviati/documenti mancanti, poi lo storico. Lista scrollabile.</p>
+          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Luogo</th><th>Azione</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0">Vendite</h2>
+            <span class="pill blue right">aperte prima</span>
+          </div>
+          <p class="mini">Prima vendite inserite/validate, poi pagate/annullate. Lista scrollabile.</p>
+          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Prodotti</th><th>Stato</th><th>Azione</th></tr></thead><tbody id="recentSalesActivityTable"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -1292,10 +1312,43 @@ function renderStatsTables() {
     <tr><td>${escapeHtml(k)}</td><td>${v.calls}</td><td>${v.apps}</td><td>${v.sales}</td><td>${money(v.value)}</td><td>${money(v.commission)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nessun dato.</td></tr>`;
 }
 
-function renderActivities() {
-  document.getElementById("recentCallsTable").innerHTML = calls.slice(0,30).map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td><td><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna chiamata.</td></tr>`;
-  document.getElementById("recentAppointmentsTable").innerHTML = appointments.slice(0,30).map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
+function activityCallScore(c) {
+  const activeOutcomes = ["Richiamare","Interessato","Appuntamento fissato","Proposta inviata","Non risponde"];
+  let score = activeOutcomes.includes(c.outcome || "") ? 1000 : 0;
+  if (c.next_follow_up && new Date(c.next_follow_up) >= new Date()) score += 400;
+  if (c.next_follow_up && new Date(c.next_follow_up) < new Date()) score += 700;
+  score += new Date(c.call_date || 0).getTime() / 10000000000000;
+  return score;
 }
+function activityAppointmentScore(a) {
+  const openOutcomes = ["Da fare","Rinviato","Documenti mancanti"];
+  let score = openOutcomes.includes(a.outcome || "") ? 1000 : 0;
+  if (a.appointment_date && new Date(a.appointment_date) >= new Date()) score += 500;
+  score += new Date(a.appointment_date || 0).getTime() / 10000000000000;
+  return score;
+}
+function activitySaleScore(s) {
+  const openStatuses = ["Inserita","Validata"];
+  let score = openStatuses.includes(s.status || "") ? 1000 : 0;
+  if (s.status === "Annullata") score -= 300;
+  score += new Date(s.sale_date || 0).getTime() / 10000000000000;
+  return score;
+}
+function renderActivities() {
+  const sortedCalls = [...calls].sort((a,b) => activityCallScore(b) - activityCallScore(a)).slice(0,80);
+  const sortedAppointments = [...appointments].sort((a,b) => activityAppointmentScore(b) - activityAppointmentScore(a)).slice(0,80);
+  const sortedSales = [...sales].sort((a,b) => activitySaleScore(b) - activitySaleScore(a)).slice(0,80);
+
+  document.getElementById("recentCallsTable").innerHTML = sortedCalls.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td><td><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna chiamata.</td></tr>`;
+
+  document.getElementById("recentAppointmentsTable").innerHTML = sortedAppointments.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
+
+  const salesActivityEl = document.getElementById("recentSalesActivityTable");
+  if (salesActivityEl) {
+    salesActivityEl.innerHTML = sortedSales.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${escapeHtml(leadNameById(s.lead_id))}</td><td>${saleItemsLabel(s)}</td><td>${saleStatusPill(s.status)}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna vendita.</td></tr>`;
+  }
+}
+
 function renderSalesPanel() {
   const month = todayISODate().slice(0,7);
   const valid = sales.filter(s => s.status !== "Annullata");
