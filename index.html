@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v35 Multiutente</title>
+  <title>CRM F.P. Consulting v36 Multiutente</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -131,6 +131,8 @@
       border:1px solid var(--line); border-radius:var(--radius);
       padding:15px; min-height:104px;
     }
+    .kpi.clickable { cursor:pointer; transition:.15s ease; }
+    .kpi.clickable:hover { border-color:#fecaca; transform:translateY(-1px); box-shadow:0 18px 42px rgba(185,28,28,.12); }
     .kpi .label { color:var(--muted); font-size:13px; font-weight:800; }
     .kpi .value { font-size:29px; font-weight:950; margin-top:8px; }
     .kpi .hint { color:var(--muted); font-size:12px; margin-top:4px; }
@@ -139,10 +141,18 @@
     th { color:#4b5563; font-size:12px; text-transform:uppercase; letter-spacing:.04em; background:#fafafa; }
     tr:hover td { background:#fff7f7; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:14px; }
-    .table-wrap.scroll-list { max-height:520px; overflow:auto; }
+    .table-wrap.scroll-list { height:430px; max-height:430px; overflow-y:auto; overflow-x:hidden; }
     .table-wrap.scroll-list thead th { position:sticky; top:0; z-index:1; }
-    .activity-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
-    @media(max-width:1200px) { .activity-grid { grid-template-columns:1fr; } }
+    .activity-grid { display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:16px; align-items:start; }
+    .activity-table { table-layout:fixed; width:100%; }
+    .activity-table th,.activity-table td { font-size:12px; padding:8px 7px; word-break:break-word; }
+    .activity-table .col-date { width:78px; }
+    .activity-table .col-lead { width:30%; }
+    .activity-table .col-outcome { width:88px; }
+    .activity-table .col-note { width:auto; }
+    .activity-table .col-action { width:58px; text-align:center; }
+    .followup-list { display:grid; gap:9px; max-height:620px; overflow-y:auto; padding-right:4px; }
+    @media(max-width:1200px) { .activity-grid { grid-template-columns:1fr; } .table-wrap.scroll-list { height:360px; } }
     .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; }
     .detail-grid div { border-bottom:1px solid var(--line); padding:7px 0; }
     .detail-grid strong { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
@@ -266,7 +276,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v35 Multiutente</div>
+          <div>CRM F.P. Consulting v36 Multiutente</div>
           <div class="sub">CRM multiutente con ruoli, team, assegnazioni, export e permessi Supabase</div>
         </div>
       </div>
@@ -297,6 +307,7 @@
     </div>
     <div class="tabs hidden" id="navTabs">
       <button class="tab active" data-panel="dashboard" onclick="showPanel('dashboard')">Dashboard</button>
+      <button class="tab" data-panel="followupPanel" onclick="showPanel('followupPanel')">Follow-up</button>
       <button class="tab" data-panel="leadsPanel" onclick="showPanel('leadsPanel')">Lead</button>
       <button class="tab" data-panel="activitiesPanel" onclick="showPanel('activitiesPanel')">Attività</button>
       <button class="tab" data-panel="calendarPanel" onclick="showPanel('calendarPanel')">Calendario</button>
@@ -343,12 +354,38 @@
           <div id="todayAppointmentsBox"></div>
         </div>
         <div class="card">
-          <h2>Follow-up scaduti</h2>
-          <div id="dueFollowupsBox"></div>
+          <div class="row">
+            <h2 style="margin:0">Follow-up scaduti</h2>
+            <button class="ghost small right" onclick="showPanel('followupPanel')">Vedi tutti</button>
+          </div>
+          <div id="dueFollowupsBox" style="margin-top:12px"></div>
         </div>
         <div class="card">
           <h2>Consigli operativi</h2>
           <div id="adviceBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="followupPanel" class="panel">
+      <div class="grid cols3">
+        <div class="card">
+          <h2>Follow-up scaduti</h2>
+          <p class="mini">Tutti i lead con richiamo/follow-up già scaduto. Clicca Chiama per aprire subito la chiamata.</p>
+          <div id="allOverdueFollowups" class="followup-list"></div>
+        </div>
+        <div class="card">
+          <h2>Follow-up prossimi</h2>
+          <p class="mini">Richiami programmati nei prossimi giorni.</p>
+          <div id="upcomingFollowups" class="followup-list"></div>
+        </div>
+        <div class="card">
+          <h2>Azioni rapide</h2>
+          <div class="notice">
+            <strong>Metodo consigliato</strong><br>
+            Lavora prima gli scaduti, poi i prossimi. Ogni chiamata aggiorna automaticamente storico, stato lead e nuovo follow-up.
+          </div>
+          <div id="followupSummaryBox" style="margin-top:12px"></div>
         </div>
       </div>
     </div>
@@ -543,7 +580,7 @@
             <span class="pill blue right">prime 10 attive + storico</span>
           </div>
           <p class="mini">Prima le chiamate più operative: richiamare, interessati, appuntamenti fissati, follow-up aperti. Lista scrollabile.</p>
-          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Note</th><th>Azione</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
+          <div class="table-wrap scroll-list"><table class="activity-table"><thead><tr><th class="col-date">Data</th><th class="col-lead">Lead</th><th class="col-outcome">Esito</th><th class="col-note">Note</th><th class="col-action">Azione</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
         </div>
         <div class="card">
           <div class="row">
@@ -551,7 +588,7 @@
             <span class="pill blue right">aperti prima</span>
           </div>
           <p class="mini">Prima gli appuntamenti da fare/rinviati/documenti mancanti, poi lo storico. Lista scrollabile.</p>
-          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Luogo</th><th>Azione</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
+          <div class="table-wrap scroll-list"><table class="activity-table"><thead><tr><th class="col-date">Data</th><th class="col-lead">Lead</th><th class="col-outcome">Esito</th><th class="col-note">Luogo</th><th class="col-action">Azione</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
         </div>
         <div class="card">
           <div class="row">
@@ -559,7 +596,7 @@
             <span class="pill blue right">aperte prima</span>
           </div>
           <p class="mini">Prima vendite inserite/validate, poi pagate/annullate. Lista scrollabile.</p>
-          <div class="table-wrap scroll-list"><table><thead><tr><th>Data</th><th>Lead</th><th>Prodotti</th><th>Stato</th><th>Azione</th></tr></thead><tbody id="recentSalesActivityTable"></tbody></table></div>
+          <div class="table-wrap scroll-list"><table class="activity-table"><thead><tr><th class="col-date">Data</th><th class="col-lead">Lead</th><th class="col-note">Prodotti</th><th class="col-outcome">Stato</th><th class="col-action">Azione</th></tr></thead><tbody id="recentSalesActivityTable"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -1358,6 +1395,7 @@ function showPanel(panelId) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.panel === panelId));
   if (panelId === "calendarPanel") renderCalendar();
   if (panelId === "usersPanel") renderUsersPanel();
+  if (panelId === "followupPanel") renderFollowupPanel();
 }
 function toggleMoneyPrivacy() {
   hideMoney = !hideMoney;
@@ -1436,6 +1474,7 @@ function renderAll() {
   renderLeadSearch();
   renderSelectedLead();
   renderDashboardLists();
+  renderFollowupPanel();
   renderSalesPanel();
   renderActivities();
   renderCalendar();
@@ -1462,7 +1501,10 @@ function renderKpis() {
     ["Vendite mese", salesMonth.length, "non annullate"],
     ["Provvigioni mese", plainMoney(commMonth), "stima"]
   ];
-  document.getElementById("kpis").innerHTML = kpis.map(k => `<div class="kpi"><div class="label">${escapeHtml(k[0])}</div><div class="value">${escapeHtml(String(k[1]))}</div><div class="hint">${escapeHtml(k[2])}</div></div>`).join("");
+  document.getElementById("kpis").innerHTML = kpis.map(k => {
+    const isFollow = k[0] === "Follow-up scaduti";
+    return `<div class="kpi ${isFollow ? "clickable" : ""}" ${isFollow ? "onclick=\"showPanel('followupPanel')\" title=\"Apri tutti i follow-up scaduti\"" : ""}><div class="label">${escapeHtml(k[0])}</div><div class="value">${escapeHtml(String(k[1]))}</div><div class="hint">${escapeHtml(k[2])}</div></div>`;
+  }).join("");
 }
 
 function findLeadMatches(text, limit=14) {
@@ -1582,6 +1624,51 @@ function renderSelectedLead() {
   leadSales.innerHTML = ls.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabel(s)}</td><td>${money(saleCommission(s))}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Modifica</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna vendita.</td></tr>`;
 }
 
+
+function followupEligibleLead(l) {
+  return l.next_follow_up && !["Venduto","Perso","Non interessato"].includes(l.status || "");
+}
+function sortedFollowups(overdue=true) {
+  const now = new Date();
+  return leads
+    .filter(followupEligibleLead)
+    .filter(l => overdue ? new Date(l.next_follow_up) <= now : new Date(l.next_follow_up) > now)
+    .sort((a,b) => new Date(a.next_follow_up) - new Date(b.next_follow_up));
+}
+function followupCard(l, overdue=true) {
+  return `<div class="task">
+    <span class="pill ${overdue ? "bad" : "blue"}">${overdue ? "Scaduto" : "Prossimo"}</span>
+    <div style="flex:1">
+      <strong>${escapeHtml(l.name || "")}</strong>
+      <div class="mini">${fmtDateTime(l.next_follow_up)} • ${escapeHtml(l.phone || "")} • ${escapeHtml(l.list_name || "")}</div>
+      <div class="mini">${escapeHtml(l.interest || "")} ${l.notes ? " • " + escapeHtml(String(l.notes).slice(0,90)) : ""}</div>
+    </div>
+    <button class="small blue" onclick="selectLead('${l.id}'); openCallModal()">Chiama</button>
+  </div>`;
+}
+function renderFollowupPanel() {
+  const overdueBox = document.getElementById("allOverdueFollowups");
+  const upcomingBox = document.getElementById("upcomingFollowups");
+  const summaryBox = document.getElementById("followupSummaryBox");
+  if (!overdueBox || !upcomingBox || !summaryBox) return;
+
+  const overdue = sortedFollowups(true);
+  const upcoming = sortedFollowups(false).slice(0,40);
+
+  overdueBox.innerHTML = overdue.map(l => followupCard(l, true)).join("") || `<p class="muted">Nessun follow-up scaduto.</p>`;
+  upcomingBox.innerHTML = upcoming.map(l => followupCard(l, false)).join("") || `<p class="muted">Nessun follow-up prossimo.</p>`;
+
+  const today = todayISODate();
+  const overdueToday = overdue.filter(l => localDateKey(l.next_follow_up) === today).length;
+  const older = overdue.length - overdueToday;
+  summaryBox.innerHTML = `
+    <div class="metric-line"><span>Scaduti totali</span><strong>${overdue.length}</strong></div>
+    <div class="metric-line"><span>Scaduti oggi</span><strong>${overdueToday}</strong></div>
+    <div class="metric-line"><span>Arretrati</span><strong>${older}</strong></div>
+    <div class="metric-line"><span>Prossimi visibili</span><strong>${upcoming.length}</strong></div>
+  `;
+}
+
 function renderDashboardLists() {
   const today = todayISODate();
   const closedAppointmentOutcomes = ["Venduto","Perso","Non presentato","Effettuato positivo"];
@@ -1604,11 +1691,11 @@ function renderDashboardLists() {
   document.getElementById("dueFollowupsBox").innerHTML = duePreview.map(l => `<div class="task"><span class="pill bad">Scaduto</span><div style="flex:1"><strong>${escapeHtml(l.name)}</strong><div class="mini">${fmtDateTime(l.next_follow_up)} • ${escapeHtml(l.phone || "")}</div></div><button class="small blue" onclick="selectLead('${l.id}'); openCallModal()">Chiama</button></div>`).join("") + (allDue.length > duePreview.length ? `<p class="mini" style="margin-top:8px">Mostrati i primi ${duePreview.length} di ${allDue.length} follow-up scaduti.</p>` : "") || `<p class="muted">Nessun follow-up scaduto.</p>`;
 
   const adv = [];
-  if (allDue.length) adv.push(["bad","Recupera follow-up scaduti",`${allDue.length} lead richiedono attenzione. In dashboard ne vedi i primi ${Math.min(8, allDue.length)}.`]);
+  if (allDue.length) adv.push(["bad","Recupera follow-up scaduti",`${allDue.length} lead richiedono attenzione. Clicca Follow-up per lavorarli tutti.`, "followupPanel"]);
   if (!todayApps.length) adv.push(["blue","Agenda libera","Puoi spingere su chiamate e fissare nuovi slot."]);
   const active = leads.filter(l => !["Venduto","Perso","Non interessato"].includes(l.status)).length;
   adv.push(["warn","Lead attivi",`${active} contatti non ancora chiusi.`]);
-  document.getElementById("adviceBox").innerHTML = adv.map(a => `<div class="task"><span class="pill ${a[0]}">${a[0]==="bad"?"Urgenza":a[0]==="blue"?"Opportunità":"Info"}</span><div><strong>${a[1]}</strong><div class="mini">${a[2]}</div></div></div>`).join("");
+  document.getElementById("adviceBox").innerHTML = adv.map(a => `<div class="task ${a[3] ? "clickable" : ""}" ${a[3] ? `onclick="showPanel('${a[3]}')"` : ""}><span class="pill ${a[0]}">${a[0]==="bad"?"Urgenza":a[0]==="blue"?"Opportunità":"Info"}</span><div><strong>${a[1]}</strong><div class="mini">${a[2]}</div></div></div>`).join("");
 }
 
 
@@ -2000,6 +2087,10 @@ function renderStatsTables() {
     <tr><td>${escapeHtml(k)}</td><td>${v.calls}</td><td>${v.apps}</td><td>${v.sales}</td><td>${money(v.value)}</td><td>${money(v.commission)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nessun dato.</td></tr>`;
 }
 
+function shortText(value, max=70) {
+  const s = String(value || "");
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
 function activityCallScore(c) {
   const activeOutcomes = ["Richiamare","Interessato","Appuntamento fissato","Proposta inviata","Non risponde"];
   let score = activeOutcomes.includes(c.outcome || "") ? 1000 : 0;
@@ -2023,17 +2114,17 @@ function activitySaleScore(s) {
   return score;
 }
 function renderActivities() {
-  const sortedCalls = [...calls].sort((a,b) => activityCallScore(b) - activityCallScore(a)).slice(0,80);
-  const sortedAppointments = [...appointments].sort((a,b) => activityAppointmentScore(b) - activityAppointmentScore(a)).slice(0,80);
-  const sortedSales = [...sales].sort((a,b) => activitySaleScore(b) - activitySaleScore(a)).slice(0,80);
+  const sortedCalls = [...calls].sort((a,b) => activityCallScore(b) - activityCallScore(a)).slice(0,120);
+  const sortedAppointments = [...appointments].sort((a,b) => activityAppointmentScore(b) - activityAppointmentScore(a)).slice(0,120);
+  const sortedSales = [...sales].sort((a,b) => activitySaleScore(b) - activitySaleScore(a)).slice(0,120);
 
-  document.getElementById("recentCallsTable").innerHTML = sortedCalls.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td><td><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna chiamata.</td></tr>`;
+  document.getElementById("recentCallsTable").innerHTML = sortedCalls.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td><strong>${escapeHtml(shortText(leadNameById(c.lead_id), 36))}</strong></td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(shortText(c.notes || "", 80))}</td><td class="col-action"><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna chiamata.</td></tr>`;
 
-  document.getElementById("recentAppointmentsTable").innerHTML = sortedAppointments.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
+  document.getElementById("recentAppointmentsTable").innerHTML = sortedAppointments.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td><strong>${escapeHtml(shortText(leadNameById(a.lead_id), 34))}</strong></td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(shortText(a.place || "", 60))}</td><td class="col-action"><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
 
   const salesActivityEl = document.getElementById("recentSalesActivityTable");
   if (salesActivityEl) {
-    salesActivityEl.innerHTML = sortedSales.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${escapeHtml(leadNameById(s.lead_id))}</td><td>${saleItemsLabel(s)}</td><td>${saleStatusPill(s.status)}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna vendita.</td></tr>`;
+    salesActivityEl.innerHTML = sortedSales.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td><strong>${escapeHtml(shortText(leadNameById(s.lead_id), 34))}</strong></td><td>${saleItemsLabel(s)}</td><td>${saleStatusPill(s.status)}</td><td class="col-action"><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna vendita.</td></tr>`;
   }
 }
 
