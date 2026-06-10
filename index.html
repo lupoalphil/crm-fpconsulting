@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v21 Operativa</title>
+  <title>CRM F.P. Consulting v22 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -193,7 +193,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v21 Operativa</div>
+          <div>CRM F.P. Consulting v22 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -456,7 +456,16 @@ function nowLocalInput() {
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0,16);
 }
-function todayISODate() { return new Date().toISOString().slice(0,10); }
+function localDateKey(value) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function todayISODate() { return localDateKey(new Date()); }
 function toIsoOrNull(value) { return value ? new Date(value).toISOString() : null; }
 function id(prefix) { return prefix + "_" + crypto.randomUUID(); }
 function normalizeSearchText(value) {
@@ -623,9 +632,9 @@ function renderKpis() {
   const today = todayISODate();
   const month = today.slice(0,7);
   const validSales = sales.filter(s => s.status !== "Annullata");
-  const salesMonth = validSales.filter(s => String(s.sale_date || "").slice(0,7) === month);
-  const callsToday = calls.filter(c => String(c.call_date || "").slice(0,10) === today).length;
-  const appsToday = appointments.filter(a => String(a.appointment_date || "").slice(0,10) === today).length;
+  const salesMonth = validSales.filter(s => localDateKey(s.sale_date).slice(0,7) === month);
+  const callsToday = calls.filter(c => localDateKey(c.call_date) === today).length;
+  const appsToday = appointments.filter(a => localDateKey(a.appointment_date) === today).length;
   const due = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status)).length;
   const commMonth = salesMonth.reduce((sum,s) => sum + saleCommission(s), 0);
   const kpis = [
@@ -750,7 +759,7 @@ function renderSelectedLead() {
 
 function renderDashboardLists() {
   const today = todayISODate();
-  const todayApps = appointments.filter(a => String(a.appointment_date || "").slice(0,10) === today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
+  const todayApps = appointments.filter(a => localDateKey(a.appointment_date) === today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
   document.getElementById("todayAppointmentsBox").innerHTML = todayApps.map(a => {
     const l = leadById(a.lead_id);
     return `<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(l?.name || "")}</strong><div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div></div><button class="small good" onclick="openSaleModal('${a.lead_id}', '${a.id}')">Vendita</button></div>`;
@@ -774,7 +783,7 @@ function renderActivities() {
 function renderSalesPanel() {
   const month = todayISODate().slice(0,7);
   const valid = sales.filter(s => s.status !== "Annullata");
-  const monthSales = valid.filter(s => String(s.sale_date || "").slice(0,7) === month);
+  const monthSales = valid.filter(s => localDateKey(s.sale_date).slice(0,7) === month);
   const monthValue = monthSales.reduce((sum,s) => sum + saleTotalValue(s), 0);
   const monthComm = monthSales.reduce((sum,s) => sum + saleCommission(s), 0);
   const ridQty = monthSales.reduce((sum,s) => sum + saleRidQty(s), 0);
@@ -817,8 +826,8 @@ function renderCalendar() {
   while (days.length % 7 !== 0) days.push(null);
   grid.innerHTML = days.map(day => {
     if (!day) return `<div class="cal-day mutedday"></div>`;
-    const key = day.toISOString().slice(0,10);
-    const events = appointments.filter(a => String(a.appointment_date || "").slice(0,10) === key).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
+    const key = localDateKey(day);
+    const events = appointments.filter(a => localDateKey(a.appointment_date) === key).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
     return `<div class="cal-day"><div class="cal-date">${day.getDate()}</div>${events.map(a => `<span class="cal-event" onclick="selectLead('${a.lead_id}')">${fmtTime(a.appointment_date)} • ${escapeHtml(leadNameById(a.lead_id))}<br>${escapeHtml(a.outcome || "")}</span>`).join("")}</div>`;
   }).join("");
 }
@@ -920,6 +929,7 @@ async function saveCallFromModal(leadId) {
   const { error } = await sb.from("calls").insert(call);
   if (error) return toast(error.message);
   await updateLeadAfterActivity(leadId, call.new_status, call.next_follow_up);
+  let createdAppointment = false;
   if (document.getElementById("mCallCreateApp").checked) {
     const app = {
       id:id("app"), user_id:currentUser.id, lead_id:leadId,
@@ -931,9 +941,13 @@ async function saveCallFromModal(leadId) {
     };
     const appRes = await sb.from("appointments").insert(app);
     if (appRes.error) return toast(appRes.error.message);
+    createdAppointment = true;
     await updateLeadAfterActivity(leadId, "Appuntamento fissato", app.appointment_date);
   }
-  closeModal(); toast("Chiamata salvata"); await refreshAll();
+  closeModal();
+  await refreshAll();
+  selectLead(leadId);
+  toast(createdAppointment ? "Chiamata e appuntamento salvati" : "Chiamata salvata");
 }
 
 function openAppointmentModal(leadId=null) {
@@ -973,14 +987,17 @@ async function saveAppointmentFromModal(leadId) {
   else if (app.outcome === "Da fare") newStatus = "Appuntamento fissato";
   await updateLeadAfterActivity(leadId, newStatus, app.next_follow_up || app.appointment_date);
   const openSale = app.outcome === "Venduto" && document.getElementById("mAppOpenSale").checked;
-  closeModal(); toast("Appuntamento salvato"); await refreshAll();
+  closeModal();
+  await refreshAll();
+  selectLead(leadId);
+  toast("Appuntamento salvato");
   if (openSale) openSaleModal(leadId, app.id);
 }
 
 function openSaleModal(leadId=null, appointmentId=null) {
   const l = requireLead(leadId); if (!l) return;
   const appointment = appointmentId ? appointments.find(a => a.id === appointmentId) : null;
-  const saleDate = appointment?.appointment_date ? String(appointment.appointment_date).slice(0,10) : todayISODate();
+  const saleDate = appointment?.appointment_date ? localDateKey(appointment.appointment_date) : todayISODate();
   const note = appointment ? `Vendita generata da appuntamento del ${fmtDateTime(appointment.appointment_date)} con esito ${appointment.outcome || ""}.` : "";
   openModal("Nuova vendita", `
     <div class="notice"><strong>${escapeHtml(l.name)}</strong><br>${escapeHtml(l.phone || "")} • ${escapeHtml(l.customer_id || "")}</div>
@@ -1033,7 +1050,10 @@ async function saveSaleFromModal(leadId) {
   const itemRes = await sb.from("sale_items").insert(items);
   if (itemRes.error) return toast(itemRes.error.message);
   if (sale.status !== "Annullata") await updateLeadAfterActivity(leadId, "Venduto", null);
-  closeModal(); toast("Vendita salvata"); await refreshAll();
+  closeModal();
+  await refreshAll();
+  selectLead(leadId);
+  toast("Vendita salvata");
 }
 async function updateLeadAfterActivity(leadId, status, nextFollowUp) {
   const patch = {};
