@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v28 Operativa</title>
+  <title>CRM F.P. Consulting v29 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -217,7 +217,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v28 Operativa</div>
+          <div>CRM F.P. Consulting v29 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -310,7 +310,7 @@
       <div class="grid cols3" style="margin-top:16px">
         <div class="card">
           <h2>Storico chiamate</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Esito</th><th>Note</th></tr></thead><tbody id="leadCallsTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Esito</th><th>Note</th><th>Azione</th></tr></thead><tbody id="leadCallsTable"></tbody></table></div>
         </div>
         <div class="card">
           <h2>Storico appuntamenti</h2>
@@ -459,7 +459,7 @@
       <div class="grid cols2">
         <div class="card">
           <h2>Ultime chiamate</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Note</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Note</th><th>Azione</th></tr></thead><tbody id="recentCallsTable"></tbody></table></div>
         </div>
         <div class="card">
           <h2>Ultimi appuntamenti</h2>
@@ -878,7 +878,7 @@ function renderSelectedLead() {
   const lc = calls.filter(c => c.lead_id === selectedLead.id).sort((a,b) => new Date(b.call_date||0)-new Date(a.call_date||0));
   const la = appointments.filter(a => a.lead_id === selectedLead.id).sort((a,b) => new Date(b.appointment_date||0)-new Date(a.appointment_date||0));
   const ls = sales.filter(s => s.lead_id === selectedLead.id).sort((a,b) => new Date(b.sale_date||0)-new Date(a.sale_date||0));
-  leadCalls.innerHTML = lc.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessuna chiamata.</td></tr>`;
+  leadCalls.innerHTML = lc.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td><td><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna chiamata.</td></tr>`;
   leadApps.innerHTML = la.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessun appuntamento.</td></tr>`;
   leadSales.innerHTML = ls.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabel(s)}</td><td>${money(saleCommission(s))}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Modifica</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna vendita.</td></tr>`;
 }
@@ -1293,7 +1293,7 @@ function renderStatsTables() {
 }
 
 function renderActivities() {
-  document.getElementById("recentCallsTable").innerHTML = calls.slice(0,30).map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna chiamata.</td></tr>`;
+  document.getElementById("recentCallsTable").innerHTML = calls.slice(0,30).map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td><td><button class="small ghost" onclick="openCallEditModal('${c.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna chiamata.</td></tr>`;
   document.getElementById("recentAppointmentsTable").innerHTML = appointments.slice(0,30).map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
 }
 function renderSalesPanel() {
@@ -1464,6 +1464,124 @@ async function saveCallFromModal(leadId) {
   await refreshAll();
   selectLead(leadId);
   toast(createdAppointment ? "Chiamata e appuntamento salvati" : "Chiamata salvata");
+}
+
+
+function openCallEditModal(callId) {
+  const call = calls.find(c => c.id === callId);
+  if (!call) return toast("Chiamata non trovata");
+  const l = leadById(call.lead_id);
+  selectedLead = l || selectedLead;
+  const outcomes = ["Non risponde","Richiamare","Interessato","Appuntamento fissato","Proposta inviata","Venduto","Non interessato","Numero errato"];
+  const statuses = ["Contattato","Da chiamare","Interessato","Appuntamento fissato","Proposta inviata","Venduto","Non interessato"];
+  openModal("Apri / aggiorna chiamata", `
+    <div class="notice"><strong>${escapeHtml(l?.name || "Lead")}</strong><br>${escapeHtml(l?.phone || "")} • ${escapeHtml(l?.customer_id || "")}</div>
+    <div class="form-grid" style="margin-top:12px">
+      <div><label>Data/ora chiamata</label><input id="eCallDate" type="datetime-local" value="${datetimeLocalFromIso(call.call_date)}"></div>
+      <div><label>Esito</label><select id="eCallOutcome" onchange="autoEditCallOutcome()">${outcomes.map(o => `<option ${o === (call.outcome || "") ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select></div>
+      <div><label>Nuovo follow-up</label><input id="eCallNext" type="datetime-local" value="${call.next_follow_up ? datetimeLocalFromIso(call.next_follow_up) : ""}"></div>
+      <div><label>Stato lead</label><select id="eCallStatus">${statuses.map(s => `<option ${s === (call.new_status || "") ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select></div>
+
+      <div class="span4"><label><input id="eCallCreateApp" type="checkbox" style="width:auto" onchange="toggleEditCallAppBox()"> Crea appuntamento da questa chiamata</label></div>
+      <div id="eCallAppBox" class="span4 hidden">
+        <div class="form-grid">
+          <div><label>Data appuntamento</label><input id="eCallAppDate" type="datetime-local" value="${nowLocalInput()}"></div>
+          <div><label>Tipo</label><select id="eCallAppType"><option>In ufficio</option><option>Telefonico</option><option>Videochiamata</option><option>Dal cliente</option></select></div>
+          <div class="span2"><label>Luogo</label><input id="eCallAppPlace"></div>
+        </div>
+      </div>
+
+      <div class="span4"><label>Note chiamata</label><textarea id="eCallNotes">${escapeHtml(call.notes || "")}</textarea></div>
+      <div class="span4 row">
+        <button class="blue" onclick="saveCallUpdate('${call.id}')">Salva aggiornamento chiamata</button>
+        <button class="brand" onclick="saveCallUpdate('${call.id}', true)">Salva e crea appuntamento</button>
+        <button class="bad" onclick="deleteCall('${call.id}')">Elimina chiamata</button>
+        <button class="ghost" onclick="closeModal()">Chiudi</button>
+      </div>
+    </div>
+  `);
+}
+
+function autoEditCallOutcome() {
+  const outcome = document.getElementById("eCallOutcome").value;
+  const status = document.getElementById("eCallStatus");
+  const cb = document.getElementById("eCallCreateApp");
+  if (outcome === "Appuntamento fissato") {
+    status.value = "Appuntamento fissato";
+    cb.checked = true;
+  } else if (outcome === "Interessato") status.value = "Interessato";
+  else if (outcome === "Venduto") status.value = "Venduto";
+  else if (outcome === "Non interessato") status.value = "Non interessato";
+  else if (outcome === "Richiamare") status.value = "Da chiamare";
+  else if (outcome === "Non risponde") status.value = "Da chiamare";
+  toggleEditCallAppBox();
+}
+
+function toggleEditCallAppBox() {
+  document.getElementById("eCallAppBox").classList.toggle("hidden", !document.getElementById("eCallCreateApp").checked);
+}
+
+async function saveCallUpdate(callId, forceAppointment=false) {
+  const call = calls.find(c => c.id === callId);
+  if (!call) return toast("Chiamata non trovata");
+
+  const wantsAppointment = forceAppointment || !!document.getElementById("eCallCreateApp")?.checked;
+  let outcome = document.getElementById("eCallOutcome").value;
+  let newStatus = document.getElementById("eCallStatus").value;
+
+  if (wantsAppointment && outcome !== "Appuntamento fissato") {
+    outcome = "Appuntamento fissato";
+    newStatus = "Appuntamento fissato";
+  }
+
+  const patch = {
+    call_date: toIsoOrNull(document.getElementById("eCallDate").value),
+    outcome,
+    new_status: newStatus,
+    next_follow_up: toIsoOrNull(document.getElementById("eCallNext").value),
+    notes: document.getElementById("eCallNotes").value.trim()
+  };
+
+  const { error } = await sb.from("calls").update(patch).eq("id", callId);
+  if (error) return toast(error.message);
+
+  let createdAppointment = false;
+  if (wantsAppointment) {
+    const app = {
+      id:id("app"), user_id:currentUser.id, lead_id:call.lead_id,
+      appointment_date:toIsoOrNull(document.getElementById("eCallAppDate").value),
+      type:document.getElementById("eCallAppType").value,
+      place:document.getElementById("eCallAppPlace").value.trim(),
+      outcome:"Da fare",
+      notes:"Creato dall'aggiornamento chiamata: " + patch.notes
+    };
+    const appRes = await sb.from("appointments").insert(app);
+    if (appRes.error) return toast(appRes.error.message);
+    createdAppointment = true;
+    await updateLeadAfterActivity(call.lead_id, "Appuntamento fissato", app.appointment_date);
+  } else {
+    await updateLeadAfterActivity(call.lead_id, patch.new_status, patch.next_follow_up);
+  }
+
+  closeModal();
+  await refreshAll();
+  selectLead(call.lead_id);
+  toast(createdAppointment ? "Chiamata aggiornata e appuntamento creato" : "Chiamata aggiornata");
+}
+
+async function deleteCall(callId) {
+  const call = calls.find(c => c.id === callId);
+  if (!call) return toast("Chiamata non trovata");
+  if (!confirm("Eliminare definitivamente questa chiamata? Operazione non reversibile.")) return;
+
+  const { error } = await sb.from("calls").delete().eq("id", callId);
+  if (error) return toast(error.message);
+
+  await recomputeLeadStatusAfterSaleChange(call.lead_id);
+  closeModal();
+  await refreshAll();
+  selectLead(call.lead_id);
+  toast("Chiamata eliminata");
 }
 
 function openAppointmentModal(leadId=null) {
