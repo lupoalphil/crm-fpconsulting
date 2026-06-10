@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v27 Operativa</title>
+  <title>CRM F.P. Consulting v28 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -174,6 +174,17 @@
     .bar-fill { height:100%; background:linear-gradient(90deg,var(--brand),#ef4444); border-radius:999px; }
     .metric-line { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); }
     .metric-line:last-child { border-bottom:0; }
+    .analysis-grid { display:grid; gap:10px; }
+    .analysis-row { display:grid; grid-template-columns:1.2fr .8fr .8fr .8fr .8fr; gap:8px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+    .analysis-row.header { color:#4b5563; font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; background:#fafafa; padding:9px 8px; border-radius:12px; border-bottom:0; }
+    .mini-chart { display:grid; gap:8px; }
+    .month-row { display:grid; grid-template-columns:58px 1fr 95px 95px; gap:10px; align-items:center; }
+    .year-row { display:grid; grid-template-columns:70px 1fr 92px 92px 92px; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
+    .dual-bars { display:grid; gap:4px; }
+    .bar-track.thin { height:8px; }
+    .bar-fill.prev { opacity:.45; }
+    .range-controls { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:12px; }
+    .range-controls > div { min-width:170px; }
     .delta.up { color:var(--good); font-weight:900; }
     .delta.down { color:var(--bad); font-weight:900; }
     .delta.flat { color:var(--muted); font-weight:900; }
@@ -192,6 +203,10 @@
       .right { margin-left:0; }
       .cal-day { min-height:92px; padding:6px; }
       .cal-event { font-size:10px; }
+      .analysis-row { grid-template-columns:1fr; }
+      .analysis-row.header { display:none; }
+      .month-row { grid-template-columns:1fr; }
+      .year-row { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -202,7 +217,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v27 Operativa</div>
+          <div>CRM F.P. Consulting v28 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -351,14 +366,34 @@
       <div class="card">
         <div class="row">
           <h2 style="margin:0">Statistiche commerciali</h2>
-          <select id="statsRange" style="width:auto" onchange="renderStatsPanel()">
-            <option value="all">Tutto</option>
-            <option value="week">Settimana corrente</option>
-            <option value="month" selected>Mese corrente</option>
-            <option value="year">Anno corrente</option>
-          </select>
+          <button class="ghost small right" onclick="setStatsPreset('month')">Mese</button>
+          <button class="ghost small" onclick="setStatsPreset('year')">Anno</button>
+          <button class="ghost small" onclick="setStatsPreset('all')">Tutto</button>
         </div>
-        <p class="mini" style="margin-top:8px">Le statistiche usano i dati caricati da Supabase: lead, chiamate, appuntamenti, vendite e righe prodotto.</p>
+        <div class="range-controls">
+          <div>
+            <label>Periodo</label>
+            <select id="statsRange" onchange="onStatsRangeChange()">
+              <option value="all">Tutto</option>
+              <option value="week">Settimana corrente</option>
+              <option value="month" selected>Mese corrente</option>
+              <option value="year">Anno corrente</option>
+              <option value="custom">Da data a data</option>
+            </select>
+          </div>
+          <div>
+            <label>Dal</label>
+            <input id="statsStartDate" type="date" onchange="setCustomStatsRange()">
+          </div>
+          <div>
+            <label>Al</label>
+            <input id="statsEndDate" type="date" onchange="setCustomStatsRange()">
+          </div>
+          <div>
+            <button class="brand" onclick="renderStatsPanel()">Aggiorna statistiche</button>
+          </div>
+        </div>
+        <p class="mini" id="statsPeriodLabel" style="margin-top:8px">Le statistiche usano i dati caricati da Supabase: lead, chiamate, appuntamenti, vendite e righe prodotto.</p>
       </div>
 
       <div class="grid cols6" id="statsKpis" style="margin-top:16px"></div>
@@ -373,9 +408,29 @@
           <div id="statsProducts"></div>
         </div>
         <div class="card">
-          <h2>Scostamenti</h2>
+          <h2>Scostamenti periodo</h2>
           <div id="statsDeltas"></div>
         </div>
+      </div>
+
+      <div class="grid cols2" style="margin-top:16px">
+        <div class="card">
+          <h2>Riepilogo periodo per prodotto/servizio</h2>
+          <div id="statsProductSummary"></div>
+        </div>
+        <div class="card">
+          <h2>Raffronto anni</h2>
+          <div id="statsYearComparison"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="row">
+          <h2 style="margin:0">Grafico annuale mese per mese</h2>
+          <select id="statsChartYear" style="width:auto" onchange="renderStatsPanel()"></select>
+        </div>
+        <p class="mini">Ogni mese mostra il valore venduto dell’anno selezionato e, sotto, il confronto con lo stesso mese dell’anno precedente.</p>
+        <div id="statsAnnualChart" style="margin-top:12px"></div>
       </div>
 
       <div class="grid cols2" style="margin-top:16px">
@@ -857,6 +912,7 @@ function renderDashboardLists() {
   document.getElementById("adviceBox").innerHTML = adv.map(a => `<div class="task"><span class="pill ${a[0]}">${a[0]==="bad"?"Urgenza":a[0]==="blue"?"Opportunità":"Info"}</span><div><strong>${a[1]}</strong><div class="mini">${a[2]}</div></div></div>`).join("");
 }
 
+
 function startOfWeek(d) {
   const x = new Date(d);
   x.setHours(0,0,0,0);
@@ -864,12 +920,8 @@ function startOfWeek(d) {
   x.setDate(x.getDate() - day);
   return x;
 }
-function startOfMonth(d) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-function startOfYear(d) {
-  return new Date(d.getFullYear(), 0, 1);
-}
+function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function startOfYear(d) { return new Date(d.getFullYear(), 0, 1); }
 function endOfPeriod(start, range) {
   const e = new Date(start);
   if (range === "week") e.setDate(e.getDate() + 7);
@@ -887,6 +939,12 @@ function periodStartForRange(range, offset=0) {
   else return null;
   return s;
 }
+function dateFromInput(value, end=false) {
+  if (!value) return null;
+  const d = new Date(value + "T00:00:00");
+  if (end) d.setDate(d.getDate() + 1);
+  return d;
+}
 function inDateRange(value, start, end) {
   if (!start) return true;
   if (!value) return false;
@@ -898,35 +956,65 @@ function rangeLabel(range) {
   if (range === "week") return "settimana";
   if (range === "month") return "mese";
   if (range === "year") return "anno";
+  if (range === "custom") return "periodo selezionato";
   return "totale";
 }
 function pct(n, d) {
   if (!d) return "0,0%";
   return (n * 100 / d).toLocaleString("it-IT", { minimumFractionDigits:1, maximumFractionDigits:1 }) + "%";
 }
-function rawPct(n, d) {
-  return d ? (n * 100 / d) : 0;
-}
+function rawPct(n, d) { return d ? (n * 100 / d) : 0; }
 function periodFilter(range, offset=0) {
+  if (range === "custom") {
+    const start = dateFromInput(document.getElementById("statsStartDate")?.value || "", false);
+    const end = dateFromInput(document.getElementById("statsEndDate")?.value || "", true);
+    return { start, end };
+  }
   if (range === "all") return { start:null, end:null };
   const start = periodStartForRange(range, offset);
   return { start, end:endOfPeriod(start, range) };
 }
+function setStatsPreset(range) {
+  const el = document.getElementById("statsRange");
+  if (!el) return;
+  el.value = range;
+  onStatsRangeChange();
+}
+function setCustomStatsRange() {
+  const el = document.getElementById("statsRange");
+  if (el) el.value = "custom";
+  renderStatsPanel();
+}
+function onStatsRangeChange() {
+  const range = document.getElementById("statsRange")?.value || "month";
+  if (range !== "custom") {
+    const { start, end } = periodFilter(range);
+    const s = document.getElementById("statsStartDate");
+    const e = document.getElementById("statsEndDate");
+    if (s) s.value = start ? localDateKey(start) : "";
+    if (e) {
+      if (end) {
+        const endInclusive = new Date(end);
+        endInclusive.setDate(endInclusive.getDate() - 1);
+        e.value = localDateKey(endInclusive);
+      } else e.value = "";
+    }
+  }
+  renderStatsPanel();
+}
+function periodHumanLabel(start, end, range) {
+  if (range === "all" || !start) return "Periodo: tutto l’archivio disponibile.";
+  const endInclusive = end ? new Date(end) : null;
+  if (endInclusive) endInclusive.setDate(endInclusive.getDate() - 1);
+  return `Periodo: ${start.toLocaleDateString("it-IT")} → ${endInclusive ? endInclusive.toLocaleDateString("it-IT") : "oggi"}.`;
+}
 function validSalesInRange(start, end) {
   return sales.filter(s => s.status !== "Annullata" && inDateRange(s.sale_date, start, end));
 }
-function callsInRange(start, end) {
-  return calls.filter(c => inDateRange(c.call_date, start, end));
-}
-function appointmentsInRange(start, end) {
-  return appointments.filter(a => inDateRange(a.appointment_date, start, end));
-}
-function salesValue(list) {
-  return list.reduce((sum,s) => sum + saleTotalValue(s), 0);
-}
-function salesCommission(list) {
-  return list.reduce((sum,s) => sum + saleCommission(s), 0);
-}
+function callsInRange(start, end) { return calls.filter(c => inDateRange(c.call_date, start, end)); }
+function appointmentsInRange(start, end) { return appointments.filter(a => inDateRange(a.appointment_date, start, end)); }
+function salesValue(list) { return list.reduce((sum,s) => sum + saleTotalValue(s), 0); }
+function salesCommission(list) { return list.reduce((sum,s) => sum + saleCommission(s), 0); }
 function deltaText(current, previous, moneyMode=false) {
   const diff = current - previous;
   const cls = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
@@ -940,12 +1028,13 @@ function productStatsForSales(saleList) {
   const map = {};
   saleItems.filter(i => ids.has(i.sale_id)).forEach(i => {
     const p = i.product || "Altro";
-    if (!map[p]) map[p] = { product:p, qty:0, value:0, commission:0 };
+    if (!map[p]) map[p] = { product:p, qty:0, value:0, commission:0, sales:new Set() };
     map[p].qty += Number(i.qty || 1);
     map[p].value += Number(i.value || 0);
     map[p].commission += saleItemCommission(i);
+    map[p].sales.add(i.sale_id);
   });
-  return Object.values(map).sort((a,b) => b.value - a.value || b.qty - a.qty);
+  return Object.values(map).map(x => ({ ...x, saleCount:x.sales.size })).sort((a,b) => b.value - a.value || b.qty - a.qty);
 }
 function weekKey(value) {
   const d = startOfWeek(new Date(value));
@@ -956,21 +1045,47 @@ function monthKey(value) {
   if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
 }
+function saleYear(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : String(d.getFullYear());
+}
+function monthNameFromIndex(i) {
+  return new Date(2026, i, 1).toLocaleDateString("it-IT", { month:"short" }).replace(".", "");
+}
+function availableSaleYears() {
+  const years = [...new Set(sales.filter(s => s.sale_date).map(s => saleYear(s.sale_date)).filter(Boolean))].sort((a,b) => b.localeCompare(a));
+  const current = String(new Date().getFullYear());
+  if (!years.includes(current)) years.unshift(current);
+  return years;
+}
+function ensureStatsYearOptions() {
+  const sel = document.getElementById("statsChartYear");
+  if (!sel) return;
+  const currentValue = sel.value || String(new Date().getFullYear());
+  const years = availableSaleYears();
+  sel.innerHTML = years.map(y => `<option value="${y}" ${y === currentValue ? "selected" : ""}>${y}</option>`).join("");
+  if (!years.includes(currentValue)) sel.value = years[0] || String(new Date().getFullYear());
+}
 function renderStatsPanel() {
   const root = document.getElementById("statsPanel");
   if (!root) return;
 
+  ensureStatsYearOptions();
+
   const range = document.getElementById("statsRange")?.value || "month";
   const { start, end } = periodFilter(range, 0);
-  const prev = range === "all" ? { start:null, end:null } : periodFilter(range, -1);
+  const prev = range === "all" || range === "custom" ? { start:null, end:null } : periodFilter(range, -1);
+
+  const label = document.getElementById("statsPeriodLabel");
+  if (label) label.textContent = periodHumanLabel(start, end, range);
 
   const c = callsInRange(start, end);
   const a = appointmentsInRange(start, end);
   const s = validSalesInRange(start, end);
 
-  const prevC = callsInRange(prev.start, prev.end);
-  const prevA = appointmentsInRange(prev.start, prev.end);
-  const prevS = validSalesInRange(prev.start, prev.end);
+  const prevC = prev.start ? callsInRange(prev.start, prev.end) : [];
+  const prevA = prev.start ? appointmentsInRange(prev.start, prev.end) : [];
+  const prevS = prev.start ? validSalesInRange(prev.start, prev.end) : [];
 
   const value = salesValue(s);
   const commission = salesCommission(s);
@@ -980,14 +1095,15 @@ function renderStatsPanel() {
   const callToApp = rawPct(a.length, c.length);
   const callToSale = rawPct(s.length, c.length);
   const appToSale = rawPct(s.length, a.length);
+  const avgSale = s.length ? value / s.length : 0;
 
   document.getElementById("statsKpis").innerHTML = [
     ["Chiamate", c.length, `nel ${rangeLabel(range)}`],
     ["Appuntamenti", a.length, `${pct(a.length, c.length)} su chiamate`],
     ["Vendite", s.length, `${pct(s.length, c.length)} su chiamate`],
     ["Valore venduto", plainMoney(value), "non annullato"],
-    ["Provvigioni", plainMoney(commission), "stimate"],
-    ["Lead attivi", leads.filter(l => !["Venduto","Perso","Non interessato"].includes(l.status)).length, "non chiusi"]
+    ["Ticket medio", plainMoney(avgSale), "valore medio vendita"],
+    ["Provvigioni", plainMoney(commission), "stimate"]
   ].map(k => `<div class="kpi"><div class="label">${escapeHtml(k[0])}</div><div class="value">${escapeHtml(String(k[1]))}</div><div class="hint">${escapeHtml(k[2])}</div></div>`).join("");
 
   document.getElementById("statsFunnel").innerHTML = [
@@ -998,27 +1114,131 @@ function renderStatsPanel() {
 
   const productRows = productStatsForSales(s);
   const maxValue = Math.max(1, ...productRows.map(p => p.value));
-  document.getElementById("statsProducts").innerHTML = productRows.length ? productRows.map(p => `
+  document.getElementById("statsProducts").innerHTML = productRows.length ? productRows.slice(0,8).map(p => `
     <div class="metric-line">
       <div style="flex:1">
         <strong>${escapeHtml(p.product)}</strong>
-        <div class="mini">Q.tà ${p.qty} • Provv. ${plainMoney(p.commission)}</div>
+        <div class="mini">Q.tà ${p.qty} • Vendite ${p.saleCount} • Provv. ${plainMoney(p.commission)}</div>
         <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, p.value * 100 / maxValue)}%"></div></div>
       </div>
       <strong>${plainMoney(p.value)}</strong>
     </div>`).join("") : `<p class="muted">Nessuna vendita nel periodo.</p>`;
 
-  document.getElementById("statsDeltas").innerHTML = range === "all"
-    ? `<p class="muted">Gli scostamenti sono disponibili su settimana, mese o anno.</p>`
+  document.getElementById("statsDeltas").innerHTML = range === "all" || range === "custom"
+    ? `<p class="muted">Gli scostamenti automatici sono disponibili su settimana, mese o anno. Per date personalizzate usa il grafico annuale e le tabelle andamento.</p>`
     : [
         ["Chiamate", c.length, prevC.length, false],
         ["Appuntamenti", a.length, prevA.length, false],
         ["Vendite", s.length, prevS.length, false],
         ["Valore venduto", value, prevValue, true],
-        ["Provvigioni", commission, prevCommission, true],
+        ["Provvigioni", commission, prevCommission, true]
       ].map(x => `<div class="metric-line"><span>${escapeHtml(x[0])}</span>${deltaText(x[1], x[2], x[3])}</div>`).join("");
 
+  renderProductSummary(productRows, value);
+  renderYearComparison();
+  renderAnnualChart();
   renderStatsTables();
+}
+function renderProductSummary(productRows, totalValue) {
+  const box = document.getElementById("statsProductSummary");
+  if (!box) return;
+  if (!productRows.length) {
+    box.innerHTML = `<p class="muted">Nessuna vendita nel periodo.</p>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="analysis-grid">
+      <div class="analysis-row header"><div>Prodotto</div><div>Q.tà</div><div>Vendite</div><div>Valore</div><div>Quota</div></div>
+      ${productRows.map(p => `
+        <div class="analysis-row">
+          <div><strong>${escapeHtml(p.product)}</strong><div class="mini">Provv. ${plainMoney(p.commission)}</div></div>
+          <div>${p.qty}</div>
+          <div>${p.saleCount}</div>
+          <div>${plainMoney(p.value)}</div>
+          <div>${pct(p.value, totalValue)}</div>
+        </div>`).join("")}
+    </div>`;
+}
+function renderYearComparison() {
+  const box = document.getElementById("statsYearComparison");
+  if (!box) return;
+  const byYear = {};
+  calls.forEach(c => {
+    if (!c.call_date) return;
+    const y = saleYear(c.call_date);
+    byYear[y] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    byYear[y].calls++;
+  });
+  appointments.forEach(a => {
+    if (!a.appointment_date) return;
+    const y = saleYear(a.appointment_date);
+    byYear[y] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    byYear[y].apps++;
+  });
+  sales.filter(s => s.status !== "Annullata").forEach(s => {
+    if (!s.sale_date) return;
+    const y = saleYear(s.sale_date);
+    byYear[y] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    byYear[y].sales++;
+    byYear[y].value += saleTotalValue(s);
+    byYear[y].commission += saleCommission(s);
+  });
+  const rows = Object.entries(byYear).filter(([y]) => y).sort((a,b) => b[0].localeCompare(a[0]));
+  const maxValue = Math.max(1, ...rows.map(([,v]) => v.value));
+  box.innerHTML = rows.length ? rows.map(([y,v]) => `
+    <div class="year-row">
+      <strong>${escapeHtml(y)}</strong>
+      <div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, v.value * 100 / maxValue)}%"></div></div><div class="mini">Valore ${plainMoney(v.value)}</div></div>
+      <div>Ch. ${v.calls}</div>
+      <div>App. ${v.apps}</div>
+      <div>Vend. ${v.sales}</div>
+    </div>`).join("") : `<p class="muted">Nessun dato annuo.</p>`;
+}
+function monthlyStatsForYear(year) {
+  const rows = Array.from({ length:12 }, (_,i) => ({ month:i, calls:0, apps:0, sales:0, value:0, commission:0 }));
+  calls.forEach(c => {
+    const d = new Date(c.call_date);
+    if (!c.call_date || d.getFullYear() !== Number(year)) return;
+    rows[d.getMonth()].calls++;
+  });
+  appointments.forEach(a => {
+    const d = new Date(a.appointment_date);
+    if (!a.appointment_date || d.getFullYear() !== Number(year)) return;
+    rows[d.getMonth()].apps++;
+  });
+  sales.filter(s => s.status !== "Annullata").forEach(s => {
+    const d = new Date(s.sale_date);
+    if (!s.sale_date || d.getFullYear() !== Number(year)) return;
+    rows[d.getMonth()].sales++;
+    rows[d.getMonth()].value += saleTotalValue(s);
+    rows[d.getMonth()].commission += saleCommission(s);
+  });
+  return rows;
+}
+function renderAnnualChart() {
+  const box = document.getElementById("statsAnnualChart");
+  const sel = document.getElementById("statsChartYear");
+  if (!box || !sel) return;
+  const year = Number(sel.value || new Date().getFullYear());
+  const current = monthlyStatsForYear(year);
+  const previous = monthlyStatsForYear(year - 1);
+  const maxValue = Math.max(1, ...current.map(x => x.value), ...previous.map(x => x.value));
+  box.innerHTML = `<div class="mini-chart">${current.map((m, i) => {
+    const p = previous[i];
+    const delta = m.value - p.value;
+    const cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+    const deltaLabel = p.value ? `${delta > 0 ? "+" : ""}${((delta / p.value) * 100).toLocaleString("it-IT", { maximumFractionDigits:1 })}%` : (m.value ? "+100%" : "0%");
+    return `<div class="month-row">
+      <strong>${monthNameFromIndex(i)}</strong>
+      <div class="dual-bars">
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(m.value ? 4 : 0, m.value * 100 / maxValue)}%"></div></div>
+        <div class="bar-track thin"><div class="bar-fill prev" style="width:${Math.max(p.value ? 4 : 0, p.value * 100 / maxValue)}%"></div></div>
+      </div>
+      <div><strong>${plainMoney(m.value)}</strong><div class="mini">${m.sales} vendite</div></div>
+      <div class="delta ${cls}">${deltaLabel}</div>
+    </div>`;
+  }).join("")}</div>
+  <p class="mini" style="margin-top:10px">Barra piena: ${year}. Barra attenuata: ${year - 1}. La percentuale mostra lo scostamento mese su stesso mese dell’anno precedente.</p>`;
 }
 function renderStatsTables() {
   const weekly = {};
