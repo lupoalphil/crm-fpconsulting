@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v17 Supabase Alpha</title>
+  <title>CRM F.P. Consulting v18 Supabase Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -65,7 +65,27 @@
     .tab.active { background:var(--brand); border-color:var(--brand); color:white; }
     .panel { display:none; }
     .panel.active { display:block; }
-    @media(max-width:900px) { .cols2,.cols4 { grid-template-columns:1fr; } .right { margin-left:0; } }
+
+    .cols3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .cols6 { grid-template-columns:repeat(6,minmax(0,1fr)); }
+    .list { display:grid; gap:10px; }
+    .task { border:1px solid var(--line); background:#fbfbfd; border-radius:14px; padding:12px; display:flex; gap:10px; align-items:flex-start; }
+    .task strong { display:block; margin-bottom:3px; }
+    .modal-backdrop { position:fixed; inset:0; z-index:60; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; padding:18px; }
+    .modal { width:min(940px,100%); max-height:92vh; overflow:auto; background:white; border-radius:22px; box-shadow:0 30px 80px rgba(0,0,0,.25); border:1px solid var(--line); padding:18px; }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:14px; }
+    .form-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+    .span2 { grid-column:span 2; } .span3 { grid-column:span 3; } .span4 { grid-column:span 4; }
+    .sale-item { display:grid; grid-template-columns:1.4fr .55fr .8fr .55fr .9fr auto; gap:10px; align-items:end; border:1px solid var(--line); background:#fffafa; border-radius:14px; padding:12px; margin-bottom:10px; }
+    .money-hidden { letter-spacing:.18em; font-weight:950; color:#111827; background:#f3f4f6; border-radius:8px; padding:2px 7px; white-space:nowrap; }
+    .cal-head { display:grid; grid-template-columns:repeat(7,1fr); border:1px solid var(--line); border-radius:14px 14px 0 0; overflow:hidden; }
+    .cal-head div { background:#fafafa; padding:9px; font-size:12px; font-weight:900; color:#4b5563; border-right:1px solid var(--line); }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); border-left:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:0 0 14px 14px; overflow:hidden; }
+    .cal-day { min-height:118px; background:white; border-right:1px solid var(--line); border-top:1px solid var(--line); padding:8px; }
+    .cal-day.mutedday { background:#fafafa; color:#c0c4cc; }
+    .cal-date { font-weight:950; margin-bottom:6px; }
+    .cal-event { display:block; margin:4px 0; padding:4px 6px; border-radius:8px; background:#fff7f7; border:1px solid #fecaca; font-size:11px; line-height:1.25; cursor:pointer; }
+    @media(max-width:900px) { .cols2,.cols3,.cols4,.cols6 { grid-template-columns:1fr; } .right { margin-left:0; } .form-grid { grid-template-columns:1fr; } .span2,.span3,.span4 { grid-column:span 1; } .sale-item { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -75,13 +95,14 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v17 Supabase Alpha</div>
-          <div class="sub">Login, import backup JSON, lead online, chiamate, appuntamenti e vendite base</div>
+          <div>CRM F.P. Consulting v18 Supabase Operativa</div>
+          <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
       <div class="row">
         <span class="pill blue" id="connPill">Supabase collegato</span>
         <span class="pill" id="userPill">Non loggato</span>
+        <button class="ghost small hidden" id="moneyBtn" onclick="toggleMoneyPrivacy()">Privacy importi: OFF</button>
         <button class="ghost small hidden" id="importToggleBtn" onclick="toggleImportCard()">Import</button>
         <button class="ghost small hidden" id="refreshBtn" onclick="refreshAll()">Aggiorna</button>
         <button class="bad small hidden" id="logoutBtn" onclick="logout()">Logout</button>
@@ -146,12 +167,24 @@
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-panel="panelLeads" onclick="showPanel('panelLeads')">Lead</button>
+      <button class="tab active" data-panel="panelDashboard" onclick="showPanel('panelDashboard')">Dashboard</button>
+      <button class="tab" data-panel="panelLeads" onclick="showPanel('panelLeads')">Lead</button>
       <button class="tab" data-panel="panelToday" onclick="showPanel('panelToday')">Oggi</button>
+      <button class="tab" data-panel="panelCalendar" onclick="showPanel('panelCalendar')">Calendario</button>
+      <button class="tab" data-panel="panelSales" onclick="showPanel('panelSales')">Vendite</button>
       <button class="tab" data-panel="panelActivities" onclick="showPanel('panelActivities')">Attività recenti</button>
+      <button class="tab" data-panel="panelSettings" onclick="showPanel('panelSettings')">Impostazioni</button>
     </div>
 
-    <div id="panelLeads" class="panel active">
+    <div id="panelDashboard" class="panel active">
+      <div class="grid cols3">
+        <div class="card"><h2>Calendario di oggi</h2><div class="list" id="dashTodayAppointments"></div></div>
+        <div class="card"><h2>Follow-up scaduti</h2><div class="list" id="dashDueFollowups"></div></div>
+        <div class="card"><h2>Consigli operativi</h2><div class="list" id="dashAdvice"></div></div>
+      </div>
+    </div>
+
+    <div id="panelLeads" class="panel">
     <div class="grid cols2">
       <div class="card">
         <h2>Ricerca lead online</h2>
@@ -276,9 +309,36 @@
         </div>
       </div>
     </div>
+
+
+    <div id="panelCalendar" class="panel">
+      <div class="card">
+        <div class="row"><h2 style="margin:0">Calendario appuntamenti</h2><button class="ghost small right" onclick="calendarPrev()">Mese precedente</button><button class="ghost small" onclick="calendarToday()">Oggi</button><button class="ghost small" onclick="calendarNext()">Mese successivo</button></div>
+        <div class="mini" id="calendarTitle" style="margin:10px 0"></div>
+        <div class="cal-head"><div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div>Dom</div></div>
+        <div id="calendarGrid" class="cal-grid"></div>
+      </div>
+    </div>
+
+    <div id="panelSales" class="panel">
+      <div class="grid cols3">
+        <div class="kpi"><div class="label">Valore vendite mese</div><div class="value" id="monthValue">0</div></div>
+        <div class="kpi"><div class="label">Provvigioni mese</div><div class="value" id="monthCommissions">0</div></div>
+        <div class="kpi"><div class="label">RID mese</div><div class="value" id="monthRid">0</div></div>
+      </div>
+      <div class="card" style="margin-top:16px"><h2>Vendite recenti</h2><div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotti</th><th>Valore</th><th>Provvigione</th><th>Stato</th></tr></thead><tbody id="salesTable"></tbody></table></div></div>
+    </div>
+
+    <div id="panelSettings" class="panel">
+      <div class="grid cols2">
+        <div class="card"><h2>Provvigioni</h2><p class="mini">Formula: fisso × quantità + percentuale sul valore + bonus RID × quantità. La provvigione manuale prevale.</p><div id="commissionSettingsBox"></div><div class="row" style="margin-top:12px"><button class="brand" onclick="saveCommissionSettings()">Salva provvigioni</button><button class="ghost" onclick="resetCommissionDefaults()">Default</button></div></div>
+        <div class="card"><h2>Privacy importi</h2><p class="mini">Oscura a video valori vendite e provvigioni.</p><button class="ghost" id="moneyBtnSettings" onclick="toggleMoneyPrivacy()">Privacy importi: OFF</button></div>
+      </div>
+    </div>
   </section>
 </main>
 
+<div id="modalRoot" class="hidden"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -17400,6 +17460,76 @@ sb.auth.onAuthStateChange((_event, session) => {
     if (currentUser) await refreshAll();
   }, 0);
 });
+
+
+// ===== V18 operative overrides =====
+var saleItemsV18 = [];
+var commissionSettingsV18 = {};
+var calendarCursorV18 = new Date();
+var hideMoneyV18 = localStorage.getItem("crm_hide_money") === "1";
+const productsV18 = ["Luce","Gas","Luce + Gas","Fibra","Manutenzione caldaia","Caldaia","Climatizzatore","Fotovoltaico","Allarme","Altro"];
+const defaultCommissionsV18 = {
+  "Luce":{fixed:25,percentage:0,rid:10},"Gas":{fixed:25,percentage:0,rid:10},"Luce + Gas":{fixed:50,percentage:0,rid:10},"Fibra":{fixed:35,percentage:0,rid:10},"Manutenzione caldaia":{fixed:30,percentage:0,rid:10},"Caldaia":{fixed:80,percentage:5,rid:10},"Climatizzatore":{fixed:80,percentage:5,rid:10},"Fotovoltaico":{fixed:150,percentage:3,rid:10},"Allarme":{fixed:60,percentage:0,rid:10},"Altro":{fixed:0,percentage:0,rid:10}
+};
+function euroV18(n){ return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(Number(n||0)); }
+function moneyV18(n){ return hideMoneyV18 ? '<span class="money-hidden">••••</span>' : euroV18(n); }
+function plainMoneyV18(n){ return hideMoneyV18 ? '••••' : euroV18(n); }
+function toggleMoneyPrivacy(){ hideMoneyV18=!hideMoneyV18; localStorage.setItem("crm_hide_money", hideMoneyV18?"1":"0"); renderV18(); }
+function renderMoneyButtonsV18(){ const txt=hideMoneyV18?"Privacy importi: ON":"Privacy importi: OFF"; ["moneyBtn","moneyBtnSettings"].forEach(id=>{const b=document.getElementById(id); if(!b)return; b.textContent=txt; b.className=hideMoneyV18?"bad small":"ghost small";}); }
+const oldRenderAuthV17 = renderAuth;
+renderAuth = function(){ oldRenderAuthV17(); const logged=!!currentUser; const b=document.getElementById("moneyBtn"); if(b) b.classList.toggle("hidden", !logged); renderMoneyButtonsV18(); };
+async function refreshAll(){
+  if(!currentUser){ const {data}=await sb.auth.getUser(); currentUser=data.user||null; renderAuth(); if(!currentUser)return; }
+  const [leadRes, callRows, appRows, saleRows, itemRows, commRows, leadCount] = await Promise.all([
+    sb.from("leads").select("*").order("created_at",{ascending:false}).limit(leadLimit),
+    sb.from("calls").select("*").order("call_date",{ascending:false}).limit(400),
+    sb.from("appointments").select("*").order("appointment_date",{ascending:false}).limit(400),
+    sb.from("sales").select("*").order("sale_date",{ascending:false}).limit(400),
+    sb.from("sale_items").select("*").limit(1200),
+    sb.from("commission_settings").select("*").limit(200),
+    sb.from("leads").select("id",{count:"exact",head:true})
+  ]);
+  for(const r of [leadRes,callRows,appRows,saleRows,itemRows,commRows]){ if(r.error) return toast(r.error.message); }
+  leads=leadRes.data||[]; calls=callRows.data||[]; appointments=appRows.data||[]; sales=saleRows.data||[]; saleItemsV18=itemRows.data||[];
+  loadCommissionSettingsV18(commRows.data||[]); await ensureDefaultCommissionSettingsV18(false);
+  document.getElementById("kpiLeads").textContent=leadCount.count??leads.length; document.getElementById("kpiCalls").textContent=calls.length; document.getElementById("kpiApps").textContent=appointments.length; document.getElementById("kpiSales").textContent=sales.length;
+  renderLeadTable(); renderLeadSearch(); renderActivityTables(); renderV18();
+}
+function loadCommissionSettingsV18(rows){ commissionSettingsV18={}; productsV18.forEach(p=>commissionSettingsV18[p]={...defaultCommissionsV18[p]}); rows.forEach(r=>commissionSettingsV18[r.product]={fixed:Number(r.fixed_amount||0),percentage:Number(r.percentage||0),rid:Number(r.rid_bonus||0),id:r.id}); }
+async function ensureDefaultCommissionSettingsV18(force){ if(!currentUser)return; const rows=productsV18.map(p=>({id:"commission_"+currentUser.id+"_"+normalizeSearchText(p).replace(/\s+/g,"_"),user_id:currentUser.id,product:p,fixed_amount:force?defaultCommissionsV18[p].fixed:(commissionSettingsV18[p]?.fixed??defaultCommissionsV18[p].fixed),percentage:force?defaultCommissionsV18[p].percentage:(commissionSettingsV18[p]?.percentage??defaultCommissionsV18[p].percentage),rid_bonus:force?defaultCommissionsV18[p].rid:(commissionSettingsV18[p]?.rid??defaultCommissionsV18[p].rid)})); const missing=force?rows:rows.filter(r=>!commissionSettingsV18[r.product]?.id); if(!missing.length)return; const {error}=await sb.from("commission_settings").upsert(missing,{onConflict:"id"}); if(error)toast(error.message); if(force){toast("Default ripristinati"); await refreshAll();} }
+function resetCommissionDefaults(){ ensureDefaultCommissionSettingsV18(true); }
+function renderV18(){ renderDashboardV18(); renderSelectedLeadV18(); renderSalesV18(); renderCalendarV18(); renderCommissionSettingsV18(); renderMoneyButtonsV18(); }
+function leadByIdV18(id){ return leads.find(l=>l.id===id)||null; }
+function itemsForSaleV18(s){ return saleItemsV18.filter(i=>i.sale_id===s.id); }
+function saleTotalValueV18(s){ return itemsForSaleV18(s).reduce((sum,i)=>sum+Number(i.value||0),0); }
+function saleRidQtyV18(s){ return itemsForSaleV18(s).filter(i=>i.rid==="SI").reduce((sum,i)=>sum+Number(i.qty||1),0); }
+function saleItemCommissionV18(i){ if(i.commission_manual!==null&&i.commission_manual!==undefined&&i.commission_manual!=="") return Number(i.commission_manual||0); const c=commissionSettingsV18[i.product]||defaultCommissionsV18[i.product]||defaultCommissionsV18.Altro; const q=Number(i.qty||1); let v=Number(c.fixed||0)*q; v+=Number(i.value||0)*(Number(c.percentage||0)/100); if(i.rid==="SI")v+=Number(c.rid||0)*q; return v; }
+function saleCommissionV18(s){ return itemsForSaleV18(s).reduce((sum,i)=>sum+saleItemCommissionV18(i),0); }
+function saleItemsLabelV18(s){ const items=itemsForSaleV18(s); return items.map(i=>`${escapeHtml(i.product||"")} x${Number(i.qty||1)}${i.rid==="SI"?" • RID":""}`).join("<br>")||"<span class='muted'>Nessuna riga</span>"; }
+function renderDashboardV18(){ const today=new Date().toISOString().slice(0,10); const due=leads.filter(l=>l.next_follow_up&&new Date(l.next_follow_up)<=new Date()&&!['Venduto','Perso','Non interessato'].includes(l.status)).slice(0,8); const todayApps=appointments.filter(a=>String(a.appointment_date||"").slice(0,10)===today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date)); document.getElementById("dashTodayAppointments").innerHTML=todayApps.map(a=>`<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(leadNameById(a.lead_id))}</strong><div class="mini">${escapeHtml(a.type||"")} • ${escapeHtml(a.place||"")} • ${escapeHtml(a.outcome||"")}</div></div><button class="small good" onclick="openSaleForm('${a.lead_id}','${a.id}')">Vendita</button></div>`).join("")||"<p class='muted'>Nessun appuntamento oggi.</p>"; document.getElementById("dashDueFollowups").innerHTML=due.map(l=>`<div class="task"><span class="pill bad">Scaduto</span><div style="flex:1"><strong>${escapeHtml(l.name)}</strong><div class="mini">${fmtDateTime(l.next_follow_up)} • ${escapeHtml(l.phone||"")}</div></div><button class="small blue" onclick="selectLead('${l.id}'); openCallForm()">Chiama</button></div>`).join("")||"<p class='muted'>Nessun follow-up scaduto.</p>"; const active=leads.filter(l=>!['Venduto','Perso','Non interessato'].includes(l.status)).length; document.getElementById("dashAdvice").innerHTML=`<div class="task"><span class="pill warn">Info</span><div><strong>Lead attivi</strong><div class="mini">${active} contatti non ancora chiusi.</div></div></div>${due.length?`<div class="task"><span class="pill bad">Priorità</span><div><strong>Richiami scaduti</strong><div class="mini">Lavora prima i follow-up già maturati.</div></div></div>`:""}`; }
+const oldSelectLeadV17 = selectLead;
+selectLead = function(id){ oldSelectLeadV17(id); renderSelectedLeadV18(); };
+function renderSelectedLeadV18(){ if(!selectedLead)return; const detail=document.getElementById("selectedLeadDetail"); const lc=calls.filter(c=>c.lead_id===selectedLead.id).slice(0,20); const la=appointments.filter(a=>a.lead_id===selectedLead.id).slice(0,20); const ls=sales.filter(s=>s.lead_id===selectedLead.id).slice(0,20); detail.innerHTML += `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><h3>Storico lead</h3><div class="grid cols2"><div><strong class="mini">Chiamate</strong><table><tbody>${lc.map(c=>`<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(c.outcome||"")}</td></tr>`).join("")||"<tr><td class='muted'>Nessuna chiamata</td></tr>"}</tbody></table></div><div><strong class="mini">Appuntamenti</strong><table><tbody>${la.map(a=>`<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(a.outcome||"")}</td></tr>`).join("")||"<tr><td class='muted'>Nessun appuntamento</td></tr>"}</tbody></table></div></div><div style="margin-top:10px"><strong class="mini">Vendite</strong><table><tbody>${ls.map(s=>`<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabelV18(s)}</td><td>${moneyV18(saleCommissionV18(s))}</td></tr>`).join("")||"<tr><td class='muted'>Nessuna vendita</td></tr>"}</tbody></table></div>`; }
+function renderSalesV18(){ const month=new Date().toISOString().slice(0,7); const ms=sales.filter(s=>s.status!=="Annullata"&&String(s.sale_date||"").slice(0,7)===month); document.getElementById("monthValue").innerHTML=moneyV18(ms.reduce((sum,s)=>sum+saleTotalValueV18(s),0)); document.getElementById("monthCommissions").innerHTML=moneyV18(ms.reduce((sum,s)=>sum+saleCommissionV18(s),0)); document.getElementById("monthRid").textContent=ms.reduce((sum,s)=>sum+saleRidQtyV18(s),0); document.getElementById("salesTable").innerHTML=sales.slice(0,80).map(s=>`<tr><td>${fmtDate(s.sale_date)}</td><td>${escapeHtml(leadNameById(s.lead_id))}</td><td>${saleItemsLabelV18(s)}</td><td>${moneyV18(saleTotalValueV18(s))}</td><td>${moneyV18(saleCommissionV18(s))}</td><td>${escapeHtml(s.status||"")}</td></tr>`).join("")||"<tr><td colspan='6' class='muted'>Nessuna vendita.</td></tr>"; }
+function renderCalendarV18(){ const grid=document.getElementById("calendarGrid"); if(!grid)return; const title=document.getElementById("calendarTitle"); const y=calendarCursorV18.getFullYear(), m=calendarCursorV18.getMonth(); const first=new Date(y,m,1), last=new Date(y,m+1,0); title.textContent=first.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()); const off=(first.getDay()+6)%7; const days=[]; for(let i=0;i<off;i++)days.push(null); for(let d=1;d<=last.getDate();d++)days.push(new Date(y,m,d)); while(days.length%7!==0)days.push(null); grid.innerHTML=days.map(day=>{ if(!day)return `<div class="cal-day mutedday"></div>`; const key=day.toISOString().slice(0,10); const ev=appointments.filter(a=>String(a.appointment_date||"").slice(0,10)===key).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date)); return `<div class="cal-day"><div class="cal-date">${day.getDate()}</div>${ev.map(a=>`<span class="cal-event" onclick="selectLead('${a.lead_id}')">${fmtTime(a.appointment_date)} • ${escapeHtml(leadNameById(a.lead_id))}<br>${escapeHtml(a.outcome||"")}</span>`).join("")}</div>`;}).join(""); }
+function calendarPrev(){ calendarCursorV18.setMonth(calendarCursorV18.getMonth()-1); renderCalendarV18(); }
+function calendarNext(){ calendarCursorV18.setMonth(calendarCursorV18.getMonth()+1); renderCalendarV18(); }
+function calendarToday(){ calendarCursorV18=new Date(); renderCalendarV18(); }
+function renderCommissionSettingsV18(){ const box=document.getElementById("commissionSettingsBox"); if(!box)return; box.innerHTML=productsV18.map(p=>{const c=commissionSettingsV18[p]||defaultCommissionsV18[p]; return `<div class="row" style="margin-bottom:8px"><div style="flex:1"><strong>${escapeHtml(p)}</strong></div><div style="width:130px"><label>Fissa €</label><input data-fixed="${escapeHtml(p)}" type="number" step="0.01" value="${Number(c.fixed||0)}"></div><div style="width:130px"><label>% venduto</label><input data-perc="${escapeHtml(p)}" type="number" step="0.01" value="${Number(c.percentage||0)}"></div><div style="width:130px"><label>Bonus RID €</label><input data-rid="${escapeHtml(p)}" type="number" step="0.01" value="${Number(c.rid||0)}"></div></div>`;}).join(""); }
+async function saveCommissionSettings(){ const rows=productsV18.map(p=>({id:"commission_"+currentUser.id+"_"+normalizeSearchText(p).replace(/\s+/g,"_"),user_id:currentUser.id,product:p,fixed_amount:Number(document.querySelector(`[data-fixed="${CSS.escape(p)}"]`)?.value||0),percentage:Number(document.querySelector(`[data-perc="${CSS.escape(p)}"]`)?.value||0),rid_bonus:Number(document.querySelector(`[data-rid="${CSS.escape(p)}"]`)?.value||0)})); const {error}=await sb.from("commission_settings").upsert(rows,{onConflict:"id"}); if(error)return toast(error.message); toast("Provvigioni salvate"); await refreshAll(); }
+function openModalV18(title, html){ let root=document.getElementById("modalRoot"); root.className="modal-backdrop"; root.innerHTML=`<div class="modal"><div class="modal-header"><h2 style="margin:0">${escapeHtml(title)}</h2><button class="ghost small" onclick="closeModalV18()">Chiudi</button></div>${html}</div>`; }
+function closeModalV18(){ const r=document.getElementById("modalRoot"); r.className="hidden"; r.innerHTML=""; }
+function productOptionsV18(sel){return productsV18.map(p=>`<option value="${escapeHtml(p)}" ${p===sel?"selected":""}>${escapeHtml(p)}</option>`).join("");}
+function requireLeadV18(id=null){const l=id?leadByIdV18(id):selectedLead; if(!l)toast("Seleziona prima un lead"); return l;}
+function openCallForm(id=null){const l=requireLeadV18(id); if(!l)return; openModalV18("Nuova chiamata",`<div class="notice"><strong>${escapeHtml(l.name)}</strong><br>${escapeHtml(l.phone||"")}</div><div class="form-grid" style="margin-top:12px"><div><label>Data/ora</label><input id="mCallDate" type="datetime-local" value="${nowLocalInput()}"></div><div><label>Esito</label><select id="mCallOutcome" onchange="if(this.value==='Appuntamento fissato'){document.getElementById('mCallCreateApp').checked=true;document.getElementById('mCallAppBox').classList.remove('hidden');}"><option>Non risponde</option><option>Richiamare</option><option>Interessato</option><option>Appuntamento fissato</option><option>Proposta inviata</option><option>Venduto</option><option>Non interessato</option></select></div><div><label>Follow-up</label><input id="mCallNext" type="datetime-local"></div><div><label>Stato lead</label><select id="mCallStatus"><option>Contattato</option><option>Da chiamare</option><option>Interessato</option><option>Appuntamento fissato</option><option>Proposta inviata</option><option>Venduto</option><option>Non interessato</option></select></div><div class="span4"><label><input id="mCallCreateApp" type="checkbox" style="width:auto" onchange="document.getElementById('mCallAppBox').classList.toggle('hidden',!this.checked)"> Crea appuntamento da questa chiamata</label></div><div id="mCallAppBox" class="span4 hidden"><div class="form-grid"><div><label>Data appuntamento</label><input id="mCallAppDate" type="datetime-local" value="${nowLocalInput()}"></div><div><label>Tipo</label><select id="mCallAppType"><option>In ufficio</option><option>Telefonico</option><option>Videochiamata</option><option>Dal cliente</option></select></div><div class="span2"><label>Luogo</label><input id="mCallAppPlace"></div></div></div><div class="span4"><label>Note</label><textarea id="mCallNotes"></textarea></div><div class="span4"><button class="blue" onclick="saveCallV18('${l.id}')">Salva chiamata</button></div></div>`);}
+async function saveCallV18(leadId){const row={id:"call_"+crypto.randomUUID(),user_id:currentUser.id,lead_id:leadId,call_date:toIsoOrNull(document.getElementById("mCallDate").value),duration:0,outcome:document.getElementById("mCallOutcome").value,new_status:document.getElementById("mCallStatus").value,next_follow_up:toIsoOrNull(document.getElementById("mCallNext").value),notes:document.getElementById("mCallNotes").value.trim()}; const {error}=await sb.from("calls").insert(row); if(error)return toast(error.message); await updateLeadV18(leadId,row.new_status,row.next_follow_up); if(document.getElementById("mCallCreateApp").checked){const app={id:"app_"+crypto.randomUUID(),user_id:currentUser.id,lead_id:leadId,appointment_date:toIsoOrNull(document.getElementById("mCallAppDate").value),type:document.getElementById("mCallAppType").value,place:document.getElementById("mCallAppPlace").value.trim(),outcome:"Da fare",notes:"Creato dalla chiamata: "+row.notes}; const r=await sb.from("appointments").insert(app); if(r.error)return toast(r.error.message); await updateLeadV18(leadId,"Appuntamento fissato",app.appointment_date);} closeModalV18(); toast("Chiamata salvata"); await refreshAll();}
+function openAppointmentForm(id=null){const l=requireLeadV18(id); if(!l)return; openModalV18("Nuovo appuntamento",`<div class="notice"><strong>${escapeHtml(l.name)}</strong><br>${escapeHtml(l.phone||"")}</div><div class="form-grid" style="margin-top:12px"><div><label>Data/ora</label><input id="mAppDate" type="datetime-local" value="${nowLocalInput()}"></div><div><label>Tipo</label><select id="mAppType"><option>In ufficio</option><option>Telefonico</option><option>Videochiamata</option><option>Dal cliente</option></select></div><div class="span2"><label>Luogo</label><input id="mAppPlace"></div><div><label>Esito</label><select id="mAppOutcome" onchange="if(this.value==='Venduto')document.getElementById('mAppOpenSale').checked=true"><option>Da fare</option><option>Effettuato positivo</option><option>Venduto</option><option>Rinviato</option><option>Perso</option><option>Documenti mancanti</option></select></div><div><label>Follow-up</label><input id="mAppNext" type="datetime-local"></div><div class="span4"><label><input id="mAppOpenSale" type="checkbox" style="width:auto"> Se venduto, apri subito vendita precompilata</label></div><div class="span4"><label>Note</label><textarea id="mAppNotes"></textarea></div><div class="span4"><button class="brand" onclick="saveAppointmentV18('${l.id}')">Salva appuntamento</button></div></div>`);}
+async function saveAppointmentV18(leadId){const app={id:"app_"+crypto.randomUUID(),user_id:currentUser.id,lead_id:leadId,appointment_date:toIsoOrNull(document.getElementById("mAppDate").value),type:document.getElementById("mAppType").value,place:document.getElementById("mAppPlace").value.trim(),outcome:document.getElementById("mAppOutcome").value,next_follow_up:toIsoOrNull(document.getElementById("mAppNext").value),notes:document.getElementById("mAppNotes").value.trim()}; const {error}=await sb.from("appointments").insert(app); if(error)return toast(error.message); const st=app.outcome==="Venduto"?"Venduto":app.outcome==="Perso"?"Perso":app.outcome==="Da fare"?"Appuntamento fissato":"Proposta inviata"; await updateLeadV18(leadId,st,app.next_follow_up||app.appointment_date); const openSale=app.outcome==="Venduto"&&document.getElementById("mAppOpenSale").checked; closeModalV18(); toast("Appuntamento salvato"); await refreshAll(); if(openSale)openSaleForm(leadId,app.id);}
+function openSaleForm(id=null,appId=null){const l=requireLeadV18(id); if(!l)return; const app=appId?appointments.find(a=>a.id===appId):null; const saleDate=app?.appointment_date?String(app.appointment_date).slice(0,10):todayISODate(); openModalV18("Nuova vendita",`<div class="notice"><strong>${escapeHtml(l.name)}</strong><br>${escapeHtml(l.phone||"")}</div><div class="form-grid" style="margin-top:12px"><div><label>Data</label><input id="mSaleDate" type="date" value="${saleDate}"></div><div><label>Stato</label><select id="mSaleStatus"><option>Inserita</option><option>Validata</option><option>Pagata</option><option>Annullata</option></select></div><div class="span4"><div class="row"><h3 style="margin:0">Prodotti</h3><button class="blue small right" onclick="addSaleItemRowV18()">+ Aggiungi</button></div><div id="mSaleItems" style="margin-top:10px"></div></div><div class="span4"><label>Note</label><textarea id="mSaleNotes">${app?`Vendita generata da appuntamento del ${fmtDateTime(app.appointment_date)}.`:""}</textarea></div><div class="span4"><button class="good" onclick="saveSaleV18('${l.id}')">Salva vendita</button></div></div>`); addSaleItemRowV18({product:productsV18.includes(l.interest)?l.interest:"Luce"});}
+function addSaleItemRowV18(item={}){const box=document.getElementById("mSaleItems"); const div=document.createElement("div"); div.className="sale-item"; div.innerHTML=`<div><label>Prodotto</label><select class="saleProduct">${productOptionsV18(item.product||"Luce")}</select></div><div><label>Q.tà</label><input class="saleQty" type="number" value="${Number(item.qty||1)}"></div><div><label>Valore €</label><input class="saleValue" type="number" step="0.01" value="0"></div><div><label>RID</label><select class="saleRid"><option>NO</option><option>SI</option></select></div><div><label>Provv. manuale</label><input class="saleManual" type="number" step="0.01" placeholder="Auto"></div><div><button class="bad small" onclick="this.closest('.sale-item').remove()">Rimuovi</button></div>`; box.appendChild(div);}
+function productOptionsV18(sel){return productsV18.map(p=>`<option value="${escapeHtml(p)}" ${p===sel?"selected":""}>${escapeHtml(p)}</option>`).join("");}
+async function saveSaleV18(leadId){const saleId="sale_"+crypto.randomUUID(); const sale={id:saleId,user_id:currentUser.id,lead_id:leadId,sale_date:document.getElementById("mSaleDate").value,status:document.getElementById("mSaleStatus").value,notes:document.getElementById("mSaleNotes").value.trim()}; const items=Array.from(document.querySelectorAll("#mSaleItems .sale-item")).map((row,idx)=>({id:`item_${saleId}_${idx+1}`,user_id:currentUser.id,sale_id:saleId,product:row.querySelector(".saleProduct").value,qty:Number(row.querySelector(".saleQty").value||1),value:Number(row.querySelector(".saleValue").value||0),rid:row.querySelector(".saleRid").value,commission_manual:row.querySelector(".saleManual").value===""?null:Number(row.querySelector(".saleManual").value)})); const r=await sb.from("sales").insert(sale); if(r.error)return toast(r.error.message); const ir=await sb.from("sale_items").insert(items); if(ir.error)return toast(ir.error.message); if(sale.status!=="Annullata")await updateLeadV18(leadId,"Venduto",null); closeModalV18(); toast("Vendita salvata"); await refreshAll();}
+async function updateLeadV18(leadId,status,next){const patch={}; if(status)patch.status=status; if(next)patch.next_follow_up=next; if(Object.keys(patch).length) await sb.from("leads").update(patch).eq("id",leadId);}
 
 init();
 </script>
