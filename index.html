@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v34 Multiutente</title>
+  <title>CRM F.P. Consulting v35 Multiutente</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -224,6 +224,12 @@
     .perm-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
     .perm-card { border:1px solid var(--line); border-radius:14px; padding:12px; background:#fbfbfd; }
     .inline-select { width:auto; min-width:145px; padding:7px 9px; border-radius:10px; font-size:12px; }
+    .admin-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .status-dot { width:8px; height:8px; border-radius:999px; display:inline-block; background:#9ca3af; }
+    .status-dot.active { background:var(--good); }
+    .status-dot.pending { background:var(--warn); }
+    .status-dot.suspended { background:var(--bad); }
+    .status-dot.removed { background:#111827; }
     .delta.up { color:var(--good); font-weight:900; }
     .delta.down { color:var(--bad); font-weight:900; }
     .delta.flat { color:var(--muted); font-weight:900; }
@@ -260,7 +266,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v34 Multiutente</div>
+          <div>CRM F.P. Consulting v35 Multiutente</div>
           <div class="sub">CRM multiutente con ruoli, team, assegnazioni, export e permessi Supabase</div>
         </div>
       </div>
@@ -452,6 +458,18 @@
             <input id="statsEndDate" type="date" onchange="setCustomStatsRange()">
           </div>
           <div>
+            <label>Team</label>
+            <select id="statsTeamFilter" onchange="renderStatsPanel()">
+              <option value="">Tutti visibili</option>
+            </select>
+          </div>
+          <div>
+            <label>Consulente</label>
+            <select id="statsUserFilter" onchange="renderStatsPanel()">
+              <option value="">Tutti visibili</option>
+            </select>
+          </div>
+          <div>
             <button class="brand" onclick="renderStatsPanel()">Aggiorna statistiche</button>
           </div>
         </div>
@@ -558,6 +576,33 @@
         </p>
       </div>
 
+      <div class="grid cols2" style="margin-top:16px">
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0">Utenti da approvare / moderare</h2>
+            <button class="ghost small right" onclick="refreshAll()">Aggiorna</button>
+          </div>
+          <p class="mini">I nuovi utenti non superadministrator entrano come <strong>in attesa</strong> e non dovrebbero lavorare finché non vengono approvati.</p>
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead><tr><th>Email</th><th>Ruolo</th><th>Stato</th><th>Azione</th></tr></thead>
+              <tbody id="pendingUsersTable"><tr><td colspan="4" class="muted">Caricamento...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Performance consulenti / team</h2>
+          <p class="mini">Il superadministrator vede tutto. Il gestore team vede i consulenti dei propri team.</p>
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead><tr><th>Consulente</th><th>Team</th><th>Ch.</th><th>App.</th><th>Vend.</th><th>Valore</th><th>Provv.</th></tr></thead>
+              <tbody id="teamPerformanceTable"><tr><td colspan="7" class="muted">Caricamento...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <div class="perm-grid" style="margin-top:16px">
         <div class="perm-card">
           <strong>Superadministrator</strong>
@@ -581,7 +626,7 @@
           </div>
           <div class="table-wrap" style="margin-top:12px">
             <table>
-              <thead><tr><th>Email</th><th>Nome</th><th>Ruolo globale</th><th>Attivo</th><th>Azione</th></tr></thead>
+              <thead><tr><th>Email</th><th>Nome</th><th>Ruolo globale</th><th>Stato</th><th>Azione</th></tr></thead>
               <tbody id="profilesTable"><tr><td colspan="5" class="muted">Caricamento...</td></tr></tbody>
             </table>
           </div>
@@ -847,6 +892,20 @@ function teamRoleLabel(role) {
   if (role === "consultant") return "Consulente";
   return role || "";
 }
+function moderationLabel(status, active) {
+  if (status === "pending") return "In attesa";
+  if (status === "suspended") return "Sospeso";
+  if (status === "removed") return "Rimosso CRM";
+  if (active === false) return "Disattivato";
+  return "Attivo";
+}
+function moderationClass(status, active) {
+  if (status === "pending") return "pending";
+  if (status === "suspended") return "suspended";
+  if (status === "removed") return "removed";
+  if (active === false) return "suspended";
+  return "active";
+}
 function canManageUsers() {
   return ["superadmin","team_manager"].includes(currentProfile?.global_role);
 }
@@ -948,20 +1007,25 @@ function renderUsersPanel() {
     return;
   }
 
+
+  renderPendingUsersTable();
+  renderTeamPerformanceTable();
+
   profilesTable.innerHTML = profiles.map(p => {
     const editable = isSuperAdmin() && p.user_id !== currentUser.id;
+    const status = p.moderation_status || (p.active ? "active" : "suspended");
     const roleControl = editable
       ? `<select class="inline-select" id="role_${p.user_id}"><option value="superadmin" ${p.global_role==="superadmin"?"selected":""}>Superadministrator</option><option value="team_manager" ${p.global_role==="team_manager"?"selected":""}>Gestore team</option><option value="consultant" ${p.global_role==="consultant"?"selected":""}>Consulente</option></select>`
       : `<span class="pill">${escapeHtml(roleLabel(p.global_role))}</span>`;
-    const activeControl = editable
-      ? `<select class="inline-select" id="active_${p.user_id}"><option value="true" ${p.active ? "selected" : ""}>Sì</option><option value="false" ${!p.active ? "selected" : ""}>No</option></select>`
-      : (p.active ? "Sì" : "No");
+    const statusControl = editable
+      ? `<select class="inline-select" id="status_${p.user_id}"><option value="active" ${status==="active"?"selected":""}>Attivo</option><option value="pending" ${status==="pending"?"selected":""}>In attesa</option><option value="suspended" ${status==="suspended"?"selected":""}>Sospeso</option><option value="removed" ${status==="removed"?"selected":""}>Rimosso CRM</option></select>`
+      : `<span class="pill"><span class="status-dot ${moderationClass(status, p.active)}"></span>${escapeHtml(moderationLabel(status, p.active))}</span>`;
     return `<tr>
       <td>${escapeHtml(p.email || "")}</td>
       <td>${escapeHtml(p.display_name || "")}</td>
       <td>${roleControl}</td>
-      <td>${activeControl}</td>
-      <td>${editable ? `<button class="small brand" onclick="saveProfileRole('${p.user_id}')">Salva</button>` : ""}</td>
+      <td>${statusControl}</td>
+      <td>${editable ? `<div class="admin-actions"><button class="small brand" onclick="saveProfileRole('${p.user_id}')">Salva</button><button class="small good" onclick="approveUser('${p.user_id}')">Approva</button><button class="small warn" onclick="suspendUser('${p.user_id}')">Sospendi</button><button class="small bad" onclick="removeUserFromCrm('${p.user_id}')">Rimuovi</button></div>` : ""}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="5" class="muted">Nessun profilo visibile.</td></tr>`;
 
@@ -981,13 +1045,145 @@ function renderUsersPanel() {
     <td>${canManageUsers() ? `<button class="small ghost" onclick="toggleMembership('${m.id}', ${m.active ? "false" : "true"})">${m.active ? "Disattiva" : "Attiva"}</button>` : ""}</td>
   </tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna assegnazione.</td></tr>`;
 }
+
+function visibleConsultantProfilesForManager() {
+  if (isSuperAdmin()) return profiles.filter(p => p.global_role !== "superadmin");
+  if (currentProfile?.global_role !== "team_manager") return profiles.filter(p => p.user_id === currentUser.id);
+  const managedTeamIds = memberships
+    .filter(m => m.user_id === currentUser.id && m.team_role === "team_manager" && m.active)
+    .map(m => m.team_id);
+  const memberIds = memberships
+    .filter(m => managedTeamIds.includes(m.team_id) && m.active)
+    .map(m => m.user_id);
+  return profiles.filter(p => memberIds.includes(p.user_id));
+}
+function renderPendingUsersTable() {
+  const box = document.getElementById("pendingUsersTable");
+  if (!box) return;
+  if (!isSuperAdmin()) {
+    box.innerHTML = `<tr><td colspan="4" class="muted">Solo il superadministrator può approvare, sospendere o rimuovere utenti.</td></tr>`;
+    return;
+  }
+  const rows = profiles
+    .filter(p => p.user_id !== currentUser.id)
+    .sort((a,b) => {
+      const order = { pending:0, suspended:1, removed:2, active:3 };
+      const sa = a.moderation_status || (a.active ? "active" : "suspended");
+      const sbv = b.moderation_status || (b.active ? "active" : "suspended");
+      return (order[sa] ?? 9) - (order[sbv] ?? 9) || String(a.email||"").localeCompare(String(b.email||""));
+    });
+  box.innerHTML = rows.map(p => {
+    const status = p.moderation_status || (p.active ? "active" : "suspended");
+    return `<tr>
+      <td>${escapeHtml(p.email || "")}</td>
+      <td>${escapeHtml(roleLabel(p.global_role))}</td>
+      <td><span class="pill"><span class="status-dot ${moderationClass(status, p.active)}"></span>${escapeHtml(moderationLabel(status, p.active))}</span></td>
+      <td><div class="admin-actions">
+        <button class="small good" onclick="approveUser('${p.user_id}')">Approva</button>
+        <button class="small warn" onclick="suspendUser('${p.user_id}')">Sospendi</button>
+        <button class="small bad" onclick="removeUserFromCrm('${p.user_id}')">Rimuovi</button>
+      </div></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">Nessun utente da moderare.</td></tr>`;
+}
+function leadIdsForUser(userId) {
+  return new Set(leads.filter(l => (l.assigned_to || l.user_id) === userId).map(l => l.id));
+}
+function renderTeamPerformanceTable() {
+  const box = document.getElementById("teamPerformanceTable");
+  if (!box) return;
+  const users = visibleConsultantProfilesForManager();
+  const rows = users.map(p => {
+    const ids = leadIdsForUser(p.user_id);
+    const userCalls = calls.filter(c => ids.has(c.lead_id));
+    const userApps = appointments.filter(a => ids.has(a.lead_id));
+    const userSales = sales.filter(s => ids.has(s.lead_id) && s.status !== "Annullata");
+    const userTeams = memberships
+      .filter(m => m.user_id === p.user_id && m.active)
+      .map(m => teamById(m.team_id)?.name)
+      .filter(Boolean)
+      .join(", ");
+    return {
+      profile:p,
+      team:userTeams,
+      calls:userCalls.length,
+      apps:userApps.length,
+      sales:userSales.length,
+      value:salesValue(userSales),
+      commission:salesCommission(userSales)
+    };
+  }).sort((a,b) => b.value - a.value || b.sales - a.sales || b.calls - a.calls);
+
+  box.innerHTML = rows.map(r => `<tr>
+    <td>${escapeHtml(r.profile.email || r.profile.display_name || "")}</td>
+    <td>${escapeHtml(r.team || "")}</td>
+    <td>${r.calls}</td>
+    <td>${r.apps}</td>
+    <td>${r.sales}</td>
+    <td>${money(r.value)}</td>
+    <td>${money(r.commission)}</td>
+  </tr>`).join("") || `<tr><td colspan="7" class="muted">Nessun consulente visibile.</td></tr>`;
+}
+function renderStatsUserTeamFilters() {
+  const teamSel = document.getElementById("statsTeamFilter");
+  const userSel = document.getElementById("statsUserFilter");
+  if (!teamSel || !userSel) return;
+
+  const oldTeam = teamSel.value;
+  const oldUser = userSel.value;
+
+  const visibleUsers = visibleConsultantProfilesForManager();
+  const visibleUserIds = new Set(visibleUsers.map(p => p.user_id));
+
+  const visibleTeamIds = new Set();
+  memberships.forEach(m => {
+    if (m.active && visibleUserIds.has(m.user_id)) visibleTeamIds.add(m.team_id);
+  });
+  leads.forEach(l => {
+    if (l.team_id && (!l.assigned_to || visibleUserIds.has(l.assigned_to) || isSuperAdmin())) visibleTeamIds.add(l.team_id);
+  });
+
+  const visibleTeams = teams.filter(t => visibleTeamIds.has(t.id) || isSuperAdmin());
+
+  teamSel.innerHTML = `<option value="">Tutti visibili</option>` + visibleTeams.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+  userSel.innerHTML = `<option value="">Tutti visibili</option>` + visibleUsers.map(p => `<option value="${p.user_id}">${escapeHtml(p.email || p.display_name || p.user_id)}</option>`).join("");
+
+  if ([...teamSel.options].some(o => o.value === oldTeam)) teamSel.value = oldTeam;
+  if ([...userSel.options].some(o => o.value === oldUser)) userSel.value = oldUser;
+}
+
 async function saveProfileRole(userId) {
   if (!isSuperAdmin()) return toast("Solo il superadministrator può modificare ruoli globali");
   const role = document.getElementById("role_" + userId)?.value;
-  const active = document.getElementById("active_" + userId)?.value === "true";
-  const { error } = await sb.from("profiles").update({ global_role:role, active }).eq("user_id", userId);
+  const status = document.getElementById("status_" + userId)?.value || "active";
+  const active = status === "active";
+  const { error } = await sb.from("profiles").update({ global_role:role, active, moderation_status:status }).eq("user_id", userId);
   if (error) return toast(error.message);
   toast("Profilo aggiornato");
+  await refreshAll();
+}
+async function approveUser(userId) {
+  if (!isSuperAdmin()) return toast("Solo il superadministrator può approvare utenti");
+  const { error } = await sb.from("profiles").update({ active:true, moderation_status:"active" }).eq("user_id", userId);
+  if (error) return toast(error.message);
+  toast("Utente approvato");
+  await refreshAll();
+}
+async function suspendUser(userId) {
+  if (!isSuperAdmin()) return toast("Solo il superadministrator può sospendere utenti");
+  if (!confirm("Sospendere questo utente? Non potrà più vedere/lavorare dati finché non viene riattivato.")) return;
+  const { error } = await sb.from("profiles").update({ active:false, moderation_status:"suspended" }).eq("user_id", userId);
+  if (error) return toast(error.message);
+  toast("Utente sospeso");
+  await refreshAll();
+}
+async function removeUserFromCrm(userId) {
+  if (!isSuperAdmin()) return toast("Solo il superadministrator può rimuovere utenti");
+  if (!confirm("Rimuovere questo utente dal CRM? L'account Auth resta in Supabase, ma profilo e membership saranno disattivati.")) return;
+  const { error } = await sb.from("profiles").update({ active:false, moderation_status:"removed" }).eq("user_id", userId);
+  if (error) return toast(error.message);
+  await sb.from("team_members").update({ active:false }).eq("user_id", userId);
+  toast("Utente rimosso dal CRM");
   await refreshAll();
 }
 async function createTeam() {
@@ -1574,6 +1770,7 @@ function renderStatsPanel() {
   if (!root) return;
 
   ensureStatsYearOptions();
+  renderStatsUserTeamFilters();
 
   const range = document.getElementById("statsRange")?.value || "month";
   const { start, end } = periodFilter(range, 0);
@@ -1582,13 +1779,21 @@ function renderStatsPanel() {
   const label = document.getElementById("statsPeriodLabel");
   if (label) label.textContent = periodHumanLabel(start, end, range);
 
-  const c = callsInRange(start, end);
-  const a = appointmentsInRange(start, end);
-  const s = validSalesInRange(start, end);
+  const statsTeamId = document.getElementById("statsTeamFilter")?.value || "";
+  const statsUserId = document.getElementById("statsUserFilter")?.value || "";
+  const statsLeadIds = new Set(leads.filter(l => {
+    if (statsTeamId && l.team_id !== statsTeamId) return false;
+    if (statsUserId && (l.assigned_to || l.user_id) !== statsUserId) return false;
+    return true;
+  }).map(l => l.id));
 
-  const prevC = prev.start ? callsInRange(prev.start, prev.end) : [];
-  const prevA = prev.start ? appointmentsInRange(prev.start, prev.end) : [];
-  const prevS = prev.start ? validSalesInRange(prev.start, prev.end) : [];
+  const c = callsInRange(start, end).filter(x => statsLeadIds.has(x.lead_id));
+  const a = appointmentsInRange(start, end).filter(x => statsLeadIds.has(x.lead_id));
+  const s = validSalesInRange(start, end).filter(x => statsLeadIds.has(x.lead_id));
+
+  const prevC = prev.start ? callsInRange(prev.start, prev.end).filter(x => statsLeadIds.has(x.lead_id)) : [];
+  const prevA = prev.start ? appointmentsInRange(prev.start, prev.end).filter(x => statsLeadIds.has(x.lead_id)) : [];
+  const prevS = prev.start ? validSalesInRange(prev.start, prev.end).filter(x => statsLeadIds.has(x.lead_id)) : [];
 
   const value = salesValue(s);
   const commission = salesCommission(s);
