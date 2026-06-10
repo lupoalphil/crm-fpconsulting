@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v31 Operativa</title>
+  <title>CRM F.P. Consulting v32 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root {
       --bg:#f6f7fb; --panel:#ffffff; --ink:#151923; --muted:#6b7280; --line:#e5e7eb;
@@ -221,7 +222,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v31 Operativa</div>
+          <div>CRM F.P. Consulting v32 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -241,6 +242,7 @@
       <button class="tab" data-panel="salesPanel" onclick="showPanel('salesPanel')">Vendite</button>
       <button class="tab" data-panel="statsPanel" onclick="showPanel('statsPanel')">Statistiche</button>
       <button class="tab" data-panel="settingsPanel" onclick="showPanel('settingsPanel')">Impostazioni</button>
+      <button class="tab" data-panel="exportPanel" onclick="showPanel('exportPanel')">Export</button>
       <button class="tab" data-panel="importPanel" onclick="showPanel('importPanel')">Import</button>
     </div>
   </div>
@@ -507,6 +509,68 @@
       </div>
     </div>
 
+    <div id="exportPanel" class="panel">
+      <div class="card">
+        <h2>Export dati per Excel / operatori</h2>
+        <p class="mini">Esporta file CSV apribili in Excel, Numbers, LibreOffice o strumenti di analisi. I file rispettano i filtri sotto.</p>
+        <div class="form-grid">
+          <div>
+            <label>Dal</label>
+            <input id="exportStartDate" type="date">
+          </div>
+          <div>
+            <label>Al</label>
+            <input id="exportEndDate" type="date">
+          </div>
+          <div>
+            <label>Lista lead</label>
+            <select id="exportListFilter">
+              <option value="">Tutte</option>
+            </select>
+          </div>
+          <div>
+            <label>Stato lead</label>
+            <select id="exportStatusFilter">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div class="span2">
+            <label>Cerca nel lead</label>
+            <input id="exportTextFilter" placeholder="nome, telefono, codice cliente, città, note...">
+          </div>
+          <div>
+            <label>Solo lead attivi</label>
+            <select id="exportActiveOnly">
+              <option value="">No, tutti</option>
+              <option value="yes">Sì, solo attivi</option>
+            </select>
+          </div>
+          <div>
+            <label>Privacy importi export</label>
+            <select id="exportHideMoney">
+              <option value="no">No, valori reali</option>
+              <option value="yes">Sì, oscura importi</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="brand" onclick="exportLeadsCsv()">Export lead</button>
+          <button class="blue" onclick="exportCallsCsv()">Export chiamate</button>
+          <button class="blue" onclick="exportAppointmentsCsv()">Export appuntamenti</button>
+          <button class="good" onclick="exportSalesCsv()">Export vendite dettagliate</button>
+          <button class="ghost" onclick="exportSalesSummaryCsv()">Export riepilogo vendite</button>
+          <button class="bad" onclick="exportAllCsvZip()">Export completo ZIP</button>
+        </div>
+
+        <div class="notice" style="margin-top:14px">
+          <strong>Nota operativa</strong><br>
+          Per girare liste ad altri operatori puoi filtrare per lista, stato, periodo o testo e scaricare solo i lead pertinenti.
+          Per analisi completa usa <strong>Export completo ZIP</strong>.
+        </div>
+      </div>
+    </div>
+
     <div id="importPanel" class="panel">
       <div class="card">
         <h2>Import dati Supabase</h2>
@@ -765,6 +829,7 @@ function renderAll() {
   renderCalendar();
   renderStatsPanel();
   renderCommissionSettings();
+  renderExportFilters();
   renderMoneyButtons();
 }
 function renderKpis() {
@@ -2002,6 +2067,257 @@ async function updateLeadAfterActivity(leadId, status, nextFollowUp) {
   if (nextFollowUp) patch.next_follow_up = nextFollowUp;
   if (!Object.keys(patch).length) return;
   await sb.from("leads").update(patch).eq("id", leadId);
+}
+
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(v => String(v || "").trim()))].sort((a,b) => String(a).localeCompare(String(b)));
+}
+function renderExportFilters() {
+  const listSel = document.getElementById("exportListFilter");
+  const statusSel = document.getElementById("exportStatusFilter");
+  if (!listSel || !statusSel) return;
+
+  const currentList = listSel.value;
+  const currentStatus = statusSel.value;
+  const lists = uniqueSorted(leads.map(l => l.list_name || ""));
+  const statuses = uniqueSorted(leads.map(l => l.status || ""));
+
+  listSel.innerHTML = `<option value="">Tutte</option>` + lists.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  statusSel.innerHTML = `<option value="">Tutti</option>` + statuses.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+
+  if (lists.includes(currentList)) listSel.value = currentList;
+  if (statuses.includes(currentStatus)) statusSel.value = currentStatus;
+}
+function exportDateRange() {
+  const start = dateFromInput(document.getElementById("exportStartDate")?.value || "", false);
+  const end = dateFromInput(document.getElementById("exportEndDate")?.value || "", true);
+  return { start, end };
+}
+function exportMoneyValue(value) {
+  return document.getElementById("exportHideMoney")?.value === "yes" ? "" : Number(value || 0);
+}
+function isActiveLead(l) {
+  return !["Venduto","Perso","Non interessato"].includes(l.status || "");
+}
+function filteredLeadsForExport() {
+  const list = document.getElementById("exportListFilter")?.value || "";
+  const status = document.getElementById("exportStatusFilter")?.value || "";
+  const text = normalizeSearchText(document.getElementById("exportTextFilter")?.value || "");
+  const activeOnly = document.getElementById("exportActiveOnly")?.value === "yes";
+  return leads.filter(l => {
+    if (list && (l.list_name || "") !== list) return false;
+    if (status && (l.status || "") !== status) return false;
+    if (activeOnly && !isActiveLead(l)) return false;
+    if (text && !leadHay(l).includes(text)) return false;
+    return true;
+  });
+}
+function filteredLeadIdsForExport() {
+  return new Set(filteredLeadsForExport().map(l => l.id));
+}
+function filteredCallsForExport() {
+  const { start, end } = exportDateRange();
+  const ids = filteredLeadIdsForExport();
+  return calls.filter(c => ids.has(c.lead_id) && inDateRange(c.call_date, start, end));
+}
+function filteredAppointmentsForExport() {
+  const { start, end } = exportDateRange();
+  const ids = filteredLeadIdsForExport();
+  return appointments.filter(a => ids.has(a.lead_id) && inDateRange(a.appointment_date, start, end));
+}
+function filteredSalesForExport() {
+  const { start, end } = exportDateRange();
+  const ids = filteredLeadIdsForExport();
+  return sales.filter(s => ids.has(s.lead_id) && inDateRange(s.sale_date, start, end));
+}
+function csvEscape(value) {
+  const s = String(value ?? "");
+  if (/[",\n\r;]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+function makeCsv(headers, rows) {
+  const sep = ";";
+  const lines = [];
+  lines.push(headers.map(csvEscape).join(sep));
+  rows.forEach(row => lines.push(headers.map(h => csvEscape(row[h])).join(sep)));
+  return "\ufeff" + lines.join("\r\n");
+}
+function downloadTextFile(filename, text, mime="text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type:mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+function exportFileStamp() {
+  return new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+}
+function leadExportRow(l) {
+  return {
+    "Nome": l.name || "",
+    "Telefono": l.phone || "",
+    "Email": l.email || "",
+    "Codice cliente": l.customer_id || "",
+    "Indirizzo": l.address || "",
+    "Città": l.city || "",
+    "Lista": l.list_name || "",
+    "POD": l.pod || "",
+    "PDR": l.pdr || "",
+    "Fonte": l.source || "",
+    "Interesse": l.interest || "",
+    "Stato": l.status || "",
+    "Priorità": l.priority || "",
+    "Prossimo follow-up": fmtDateTime(l.next_follow_up),
+    "Operatore": l.operator || "",
+    "Note": l.notes || "",
+    "Creato il": fmtDateTime(l.created_at),
+    "Aggiornato il": fmtDateTime(l.updated_at)
+  };
+}
+function exportLeadsCsv(returnOnly=false) {
+  const headers = ["Nome","Telefono","Email","Codice cliente","Indirizzo","Città","Lista","POD","PDR","Fonte","Interesse","Stato","Priorità","Prossimo follow-up","Operatore","Note","Creato il","Aggiornato il"];
+  const rows = filteredLeadsForExport().map(leadExportRow);
+  const csv = makeCsv(headers, rows);
+  if (returnOnly) return csv;
+  downloadTextFile(`crm_export_lead_${exportFileStamp()}.csv`, csv);
+  toast(`Export lead: ${rows.length} righe`);
+}
+function exportCallsCsv(returnOnly=false) {
+  const headers = ["Data chiamata","Lead","Telefono","Codice cliente","Lista","Esito","Nuovo stato","Follow-up","Note"];
+  const rows = filteredCallsForExport().map(c => {
+    const l = leadById(c.lead_id) || {};
+    return {
+      "Data chiamata": fmtDateTime(c.call_date),
+      "Lead": l.name || "",
+      "Telefono": l.phone || "",
+      "Codice cliente": l.customer_id || "",
+      "Lista": l.list_name || "",
+      "Esito": c.outcome || "",
+      "Nuovo stato": c.new_status || "",
+      "Follow-up": fmtDateTime(c.next_follow_up),
+      "Note": c.notes || ""
+    };
+  });
+  const csv = makeCsv(headers, rows);
+  if (returnOnly) return csv;
+  downloadTextFile(`crm_export_chiamate_${exportFileStamp()}.csv`, csv);
+  toast(`Export chiamate: ${rows.length} righe`);
+}
+function exportAppointmentsCsv(returnOnly=false) {
+  const headers = ["Data appuntamento","Lead","Telefono","Codice cliente","Lista","Tipo","Luogo","Esito","Follow-up","Note"];
+  const rows = filteredAppointmentsForExport().map(a => {
+    const l = leadById(a.lead_id) || {};
+    return {
+      "Data appuntamento": fmtDateTime(a.appointment_date),
+      "Lead": l.name || "",
+      "Telefono": l.phone || "",
+      "Codice cliente": l.customer_id || "",
+      "Lista": l.list_name || "",
+      "Tipo": a.type || "",
+      "Luogo": a.place || "",
+      "Esito": a.outcome || "",
+      "Follow-up": fmtDateTime(a.next_follow_up),
+      "Note": a.notes || ""
+    };
+  });
+  const csv = makeCsv(headers, rows);
+  if (returnOnly) return csv;
+  downloadTextFile(`crm_export_appuntamenti_${exportFileStamp()}.csv`, csv);
+  toast(`Export appuntamenti: ${rows.length} righe`);
+}
+function exportSalesCsv(returnOnly=false) {
+  const headers = ["Data vendita","Lead","Telefono","Codice cliente","Lista","Stato vendita","Prodotto","Quantità","Valore","RID","Provvigione manuale","Provvigione calcolata","Note vendita"];
+  const saleList = filteredSalesForExport();
+  const rows = [];
+  saleList.forEach(s => {
+    const l = leadById(s.lead_id) || {};
+    const items = itemsForSale(s);
+    if (!items.length) {
+      rows.push({
+        "Data vendita": fmtDate(s.sale_date),
+        "Lead": l.name || "",
+        "Telefono": l.phone || "",
+        "Codice cliente": l.customer_id || "",
+        "Lista": l.list_name || "",
+        "Stato vendita": s.status || "",
+        "Prodotto": "",
+        "Quantità": "",
+        "Valore": "",
+        "RID": "",
+        "Provvigione manuale": "",
+        "Provvigione calcolata": "",
+        "Note vendita": s.notes || ""
+      });
+    }
+    items.forEach(i => rows.push({
+      "Data vendita": fmtDate(s.sale_date),
+      "Lead": l.name || "",
+      "Telefono": l.phone || "",
+      "Codice cliente": l.customer_id || "",
+      "Lista": l.list_name || "",
+      "Stato vendita": s.status || "",
+      "Prodotto": i.product || "",
+      "Quantità": Number(i.qty || 1),
+      "Valore": exportMoneyValue(i.value),
+      "RID": i.rid || "",
+      "Provvigione manuale": exportMoneyValue(i.commission_manual),
+      "Provvigione calcolata": exportMoneyValue(saleItemCommission(i)),
+      "Note vendita": s.notes || ""
+    }));
+  });
+  const csv = makeCsv(headers, rows);
+  if (returnOnly) return csv;
+  downloadTextFile(`crm_export_vendite_dettaglio_${exportFileStamp()}.csv`, csv);
+  toast(`Export vendite dettagliate: ${rows.length} righe`);
+}
+function exportSalesSummaryCsv(returnOnly=false) {
+  const headers = ["Data vendita","Lead","Telefono","Codice cliente","Lista","Stato vendita","Prodotti","Valore totale","Provvigione totale","Note"];
+  const rows = filteredSalesForExport().map(s => {
+    const l = leadById(s.lead_id) || {};
+    return {
+      "Data vendita": fmtDate(s.sale_date),
+      "Lead": l.name || "",
+      "Telefono": l.phone || "",
+      "Codice cliente": l.customer_id || "",
+      "Lista": l.list_name || "",
+      "Stato vendita": s.status || "",
+      "Prodotti": itemsForSale(s).map(i => `${i.product || ""} x${Number(i.qty || 1)}${i.rid === "SI" ? " RID" : ""}`).join(" | "),
+      "Valore totale": exportMoneyValue(saleTotalValue(s)),
+      "Provvigione totale": exportMoneyValue(saleCommission(s)),
+      "Note": s.notes || ""
+    };
+  });
+  const csv = makeCsv(headers, rows);
+  if (returnOnly) return csv;
+  downloadTextFile(`crm_export_vendite_riepilogo_${exportFileStamp()}.csv`, csv);
+  toast(`Export riepilogo vendite: ${rows.length} righe`);
+}
+async function exportAllCsvZip() {
+  if (!window.JSZip) {
+    toast("Libreria ZIP non caricata. Usa i singoli export CSV.");
+    return;
+  }
+  const zip = new JSZip();
+  zip.file("lead.csv", exportLeadsCsv(true));
+  zip.file("chiamate.csv", exportCallsCsv(true));
+  zip.file("appuntamenti.csv", exportAppointmentsCsv(true));
+  zip.file("vendite_dettaglio.csv", exportSalesCsv(true));
+  zip.file("vendite_riepilogo.csv", exportSalesSummaryCsv(true));
+  const blob = await zip.generateAsync({ type:"blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `crm_export_completo_${exportFileStamp()}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+  toast("Export ZIP completo creato");
 }
 
 function setImportStatus(message, isError=false) {
