@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v25 Operativa</title>
+  <title>CRM F.P. Consulting v26 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -195,7 +195,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v25 Operativa</div>
+          <div>CRM F.P. Consulting v26 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -295,7 +295,7 @@
         </div>
         <div class="card">
           <h2>Storico vendite</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Prodotti</th><th>Provv.</th></tr></thead><tbody id="leadSalesTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Prodotti</th><th>Provv.</th><th>Azione</th></tr></thead><tbody id="leadSalesTable"></tbody></table></div>
         </div>
       </div>
 
@@ -335,7 +335,7 @@
       </div>
       <div class="card" style="margin-top:16px">
         <h2>Vendite recenti</h2>
-        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotti</th><th>Valore</th><th>Provvigione</th><th>Stato</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotti</th><th>Valore</th><th>Provvigione</th><th>Stato</th><th>Azione</th></tr></thead><tbody id="salesTable"></tbody></table></div>
       </div>
     </div>
 
@@ -721,6 +721,13 @@ function statusPill(status) {
   return `<span class="pill warn">${escapeHtml(status || "Nuovo")}</span>`;
 }
 
+function saleStatusPill(status) {
+  if (status === "Annullata") return `<span class="pill bad">Annullata</span>`;
+  if (status === "Pagata") return `<span class="pill good">Pagata</span>`;
+  if (status === "Validata") return `<span class="pill blue">Validata</span>`;
+  return `<span class="pill warn">${escapeHtml(status || "Inserita")}</span>`;
+}
+
 function renderSelectedLead() {
   const box = document.getElementById("selectedLeadBox");
   const detail = document.getElementById("selectedLeadDetail");
@@ -756,7 +763,7 @@ function renderSelectedLead() {
   const ls = sales.filter(s => s.lead_id === selectedLead.id).sort((a,b) => new Date(b.sale_date||0)-new Date(a.sale_date||0));
   leadCalls.innerHTML = lc.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessuna chiamata.</td></tr>`;
   leadApps.innerHTML = la.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessun appuntamento.</td></tr>`;
-  leadSales.innerHTML = ls.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabel(s)}</td><td>${money(saleCommission(s))}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessuna vendita.</td></tr>`;
+  leadSales.innerHTML = ls.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabel(s)}</td><td>${money(saleCommission(s))}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Modifica</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna vendita.</td></tr>`;
 }
 
 function renderDashboardLists() {
@@ -801,7 +808,7 @@ function renderSalesPanel() {
   document.getElementById("monthValue").innerHTML = money(monthValue);
   document.getElementById("monthCommissions").innerHTML = money(monthComm);
   document.getElementById("monthRid").textContent = ridQty;
-  document.getElementById("salesTable").innerHTML = sales.slice(0,80).map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${escapeHtml(leadNameById(s.lead_id))}</td><td>${saleItemsLabel(s)}</td><td>${money(saleTotalValue(s))}</td><td>${money(saleCommission(s))}</td><td>${escapeHtml(s.status || "")}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nessuna vendita.</td></tr>`;
+  document.getElementById("salesTable").innerHTML = sales.slice(0,80).map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${escapeHtml(leadNameById(s.lead_id))}</td><td>${saleItemsLabel(s)}</td><td>${money(saleTotalValue(s))}</td><td>${money(saleCommission(s))}</td><td>${saleStatusPill(s.status)}</td><td><button class="small ghost" onclick="openSaleEditModal('${s.id}')">Modifica</button></td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nessuna vendita.</td></tr>`;
 }
 function itemsForSale(sale) { return saleItems.filter(i => i.sale_id === sale.id); }
 function saleTotalValue(sale) { return itemsForSale(sale).reduce((sum,i) => sum + Number(i.value || 0), 0); }
@@ -1159,6 +1166,167 @@ async function saveSaleFromModal(leadId) {
   selectLead(leadId);
   toast("Vendita salvata");
 }
+
+function dateInputFromSaleDate(value) {
+  if (!value) return todayISODate();
+  return localDateKey(value);
+}
+
+function openSaleEditModal(saleId) {
+  const sale = sales.find(s => s.id === saleId);
+  if (!sale) return toast("Vendita non trovata");
+  const l = leadById(sale.lead_id);
+  selectedLead = l || selectedLead;
+  const items = itemsForSale(sale);
+  openModal("Modifica vendita", `
+    <div class="notice"><strong>${escapeHtml(l?.name || "Lead")}</strong><br>${escapeHtml(l?.phone || "")} • ${escapeHtml(l?.customer_id || "")}</div>
+    <div class="form-grid" style="margin-top:12px">
+      <div><label>Data vendita</label><input id="eSaleDate" type="date" value="${dateInputFromSaleDate(sale.sale_date)}"></div>
+      <div><label>Stato</label><select id="eSaleStatus">
+        <option ${sale.status === "Inserita" ? "selected" : ""}>Inserita</option>
+        <option ${sale.status === "Validata" ? "selected" : ""}>Validata</option>
+        <option ${sale.status === "Pagata" ? "selected" : ""}>Pagata</option>
+        <option ${sale.status === "Annullata" ? "selected" : ""}>Annullata</option>
+      </select></div>
+      <div class="span4">
+        <div class="row"><h3 style="margin:0">Prodotti / contratti</h3><button class="blue small right" onclick="addEditSaleItemRow()">+ Aggiungi prodotto</button></div>
+        <div id="eSaleItems" style="margin-top:10px"></div>
+      </div>
+      <div class="span4"><label>Note</label><textarea id="eSaleNotes">${escapeHtml(sale.notes || "")}</textarea></div>
+      <div class="span4 row">
+        <button class="brand" onclick="saveSaleUpdate('${sale.id}')">Salva modifiche</button>
+        <button class="warn" onclick="annulSale('${sale.id}')">Annulla vendita</button>
+        <button class="bad" onclick="deleteSale('${sale.id}')">Elimina vendita</button>
+        <button class="ghost" onclick="closeModal()">Chiudi</button>
+      </div>
+    </div>
+  `);
+  if (items.length) items.forEach(item => addEditSaleItemRow(item));
+  else addEditSaleItemRow({ product:"Altro", qty:1, value:0, rid:"NO", commission_manual:null });
+}
+
+function addEditSaleItemRow(item={}) {
+  const box = document.getElementById("eSaleItems");
+  const div = document.createElement("div");
+  div.className = "sale-item";
+  div.dataset.itemId = item.id || "";
+  div.innerHTML = `
+    <div><label>Prodotto</label><select class="saleProduct">${productOptions(item.product || "Luce")}</select></div>
+    <div><label>Q.tà</label><input class="saleQty" type="number" value="${Number(item.qty || 1)}" min="1"></div>
+    <div><label>Valore €</label><input class="saleValue" type="number" step="0.01" value="${Number(item.value || 0)}"></div>
+    <div><label>RID</label><select class="saleRid"><option ${item.rid !== "SI" ? "selected" : ""}>NO</option><option ${item.rid === "SI" ? "selected" : ""}>SI</option></select></div>
+    <div><label>Provv. manuale €</label><input class="saleManual" type="number" step="0.01" placeholder="Auto" value="${item.commission_manual ?? ""}"></div>
+    <div><button class="bad small" onclick="this.closest('.sale-item').remove()">Rimuovi</button></div>`;
+  box.appendChild(div);
+}
+
+async function saveSaleUpdate(saleId) {
+  const sale = sales.find(s => s.id === saleId);
+  if (!sale) return toast("Vendita non trovata");
+
+  const salePatch = {
+    sale_date: document.getElementById("eSaleDate").value || todayISODate(),
+    status: document.getElementById("eSaleStatus").value,
+    notes: document.getElementById("eSaleNotes").value.trim()
+  };
+
+  const rows = Array.from(document.querySelectorAll("#eSaleItems .sale-item"));
+  if (!rows.length) return toast("Inserisci almeno un prodotto");
+
+  const newItems = rows.map((row, idx) => ({
+    id: row.dataset.itemId || `item_${saleId}_${crypto.randomUUID()}`,
+    user_id: currentUser.id,
+    sale_id: saleId,
+    product: row.querySelector(".saleProduct").value,
+    qty: Number(row.querySelector(".saleQty").value || 1),
+    value: Number(row.querySelector(".saleValue").value || 0),
+    rid: row.querySelector(".saleRid").value,
+    commission_manual: row.querySelector(".saleManual").value === "" ? null : Number(row.querySelector(".saleManual").value)
+  }));
+
+  const existingIds = itemsForSale(sale).map(i => i.id);
+  const newIds = newItems.map(i => i.id);
+  const toDelete = existingIds.filter(x => !newIds.includes(x));
+
+  const saleRes = await sb.from("sales").update(salePatch).eq("id", saleId);
+  if (saleRes.error) return toast(saleRes.error.message);
+
+  if (toDelete.length) {
+    const delRes = await sb.from("sale_items").delete().in("id", toDelete);
+    if (delRes.error) return toast(delRes.error.message);
+  }
+
+  const itemRes = await sb.from("sale_items").upsert(newItems, { onConflict:"id" });
+  if (itemRes.error) return toast(itemRes.error.message);
+
+  if (salePatch.status === "Annullata") {
+    await recomputeLeadStatusAfterSaleChange(sale.lead_id);
+  } else {
+    await updateLeadAfterActivity(sale.lead_id, "Venduto", null);
+  }
+
+  closeModal();
+  await refreshAll();
+  selectLead(sale.lead_id);
+  toast("Vendita aggiornata");
+}
+
+async function annulSale(saleId) {
+  const sale = sales.find(s => s.id === saleId);
+  if (!sale) return toast("Vendita non trovata");
+  if (!confirm("Annullare questa vendita? Rimarrà nello storico ma non sarà conteggiata nei totali.")) return;
+  const { error } = await sb.from("sales").update({ status:"Annullata" }).eq("id", saleId);
+  if (error) return toast(error.message);
+  await recomputeLeadStatusAfterSaleChange(sale.lead_id);
+  closeModal();
+  await refreshAll();
+  selectLead(sale.lead_id);
+  toast("Vendita annullata");
+}
+
+async function deleteSale(saleId) {
+  const sale = sales.find(s => s.id === saleId);
+  if (!sale) return toast("Vendita non trovata");
+  if (!confirm("Eliminare definitivamente questa vendita e le sue righe prodotto? Operazione non reversibile.")) return;
+
+  const delItems = await sb.from("sale_items").delete().eq("sale_id", saleId);
+  if (delItems.error) return toast(delItems.error.message);
+
+  const delSale = await sb.from("sales").delete().eq("id", saleId);
+  if (delSale.error) return toast(delSale.error.message);
+
+  await recomputeLeadStatusAfterSaleChange(sale.lead_id);
+  closeModal();
+  await refreshAll();
+  selectLead(sale.lead_id);
+  toast("Vendita eliminata");
+}
+
+async function recomputeLeadStatusAfterSaleChange(leadId) {
+  const otherValidSales = sales.filter(s => s.lead_id === leadId && s.status !== "Annullata");
+  if (otherValidSales.length > 1) {
+    await updateLeadAfterActivity(leadId, "Venduto", null);
+    return;
+  }
+
+  const leadApps = appointments.filter(a => a.lead_id === leadId).sort((a,b) => new Date(b.appointment_date || 0) - new Date(a.appointment_date || 0));
+  const latestApp = leadApps[0];
+
+  if (latestApp) {
+    await updateLeadAfterActivity(leadId, statusFromAppointmentOutcome(latestApp.outcome || ""), latestApp.next_follow_up || latestApp.appointment_date);
+    return;
+  }
+
+  const leadCalls = calls.filter(c => c.lead_id === leadId).sort((a,b) => new Date(b.call_date || 0) - new Date(a.call_date || 0));
+  const latestCall = leadCalls[0];
+  if (latestCall) {
+    await updateLeadAfterActivity(leadId, latestCall.new_status || "Contattato", latestCall.next_follow_up);
+    return;
+  }
+
+  await updateLeadAfterActivity(leadId, "Da chiamare", null);
+}
+
 async function updateLeadAfterActivity(leadId, status, nextFollowUp) {
   const patch = {};
   if (status) patch.status = status;
