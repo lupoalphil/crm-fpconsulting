@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v32 Operativa</title>
+  <title>CRM F.P. Consulting v33 Multiutente</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -190,6 +190,9 @@
     .bar-fill.prev { opacity:.45; }
     .range-controls { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:12px; }
     .range-controls > div { min-width:170px; }
+    .perm-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .perm-card { border:1px solid var(--line); border-radius:14px; padding:12px; background:#fbfbfd; }
+    .inline-select { width:auto; min-width:145px; padding:7px 9px; border-radius:10px; font-size:12px; }
     .delta.up { color:var(--good); font-weight:900; }
     .delta.down { color:var(--bad); font-weight:900; }
     .delta.flat { color:var(--muted); font-weight:900; }
@@ -212,6 +215,7 @@
       .analysis-row.header { display:none; }
       .month-row { grid-template-columns:1fr; }
       .year-row { grid-template-columns:1fr; }
+      .perm-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -222,13 +226,14 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v32 Operativa</div>
-          <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
+          <div>CRM F.P. Consulting v33 Multiutente</div>
+          <div class="sub">CRM multiutente con ruoli, team, assegnazioni, export e permessi Supabase</div>
         </div>
       </div>
       <div class="row">
         <span class="pill blue" id="connPill">Supabase collegato</span>
         <span class="pill" id="userPill">Non loggato</span>
+        <span class="pill warn hidden" id="rolePill">Ruolo</span>
         <button class="ghost small hidden" id="moneyBtn" onclick="toggleMoneyPrivacy()">Privacy importi: OFF</button>
         <button class="ghost small hidden" id="refreshBtn" onclick="refreshAll()">Aggiorna</button>
         <button class="bad small hidden" id="logoutBtn" onclick="logout()">Logout</button>
@@ -241,6 +246,7 @@
       <button class="tab" data-panel="calendarPanel" onclick="showPanel('calendarPanel')">Calendario</button>
       <button class="tab" data-panel="salesPanel" onclick="showPanel('salesPanel')">Vendite</button>
       <button class="tab" data-panel="statsPanel" onclick="showPanel('statsPanel')">Statistiche</button>
+      <button class="tab" data-panel="usersPanel" onclick="showPanel('usersPanel')">Utenti</button>
       <button class="tab" data-panel="settingsPanel" onclick="showPanel('settingsPanel')">Impostazioni</button>
       <button class="tab" data-panel="exportPanel" onclick="showPanel('exportPanel')">Export</button>
       <button class="tab" data-panel="importPanel" onclick="showPanel('importPanel')">Import</button>
@@ -490,6 +496,100 @@
       </div>
     </div>
 
+    <div id="usersPanel" class="panel">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">Utenti, ruoli e team</h2>
+          <span class="pill blue" id="myRoleBox">Ruolo corrente</span>
+        </div>
+        <p class="mini" style="margin-top:8px">
+          La multiutenza richiede prima l'esecuzione della migrazione SQL v33 su Supabase.
+          Gli utenti devono prima registrarsi al CRM; poi un superadministrator o un gestore team può assegnarli a team e ruoli.
+        </p>
+      </div>
+
+      <div class="perm-grid" style="margin-top:16px">
+        <div class="perm-card">
+          <strong>Superadministrator</strong>
+          <p class="mini">Vede e gestisce tutto: utenti, team, lead, attività, vendite, export e permessi.</p>
+        </div>
+        <div class="perm-card">
+          <strong>Gestore team</strong>
+          <p class="mini">Vede i lead e le attività del proprio team, assegna lead e gestisce i consulenti del team.</p>
+        </div>
+        <div class="perm-card">
+          <strong>Consulente</strong>
+          <p class="mini">Vede e lavora solo i lead propri o assegnati, con le relative chiamate, appuntamenti e vendite.</p>
+        </div>
+      </div>
+
+      <div class="grid cols2" style="margin-top:16px">
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0">Profili utenti</h2>
+            <button class="ghost small right" onclick="refreshAll()">Aggiorna</button>
+          </div>
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead><tr><th>Email</th><th>Nome</th><th>Ruolo globale</th><th>Attivo</th><th>Azione</th></tr></thead>
+              <tbody id="profilesTable"><tr><td colspan="5" class="muted">Caricamento...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Team</h2>
+          <div class="row">
+            <input id="newTeamName" placeholder="Nome nuovo team">
+            <button class="brand" onclick="createTeam()">Crea team</button>
+          </div>
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead><tr><th>Team</th><th>Creato da</th><th>Azione</th></tr></thead>
+              <tbody id="teamsTable"><tr><td colspan="3" class="muted">Nessun team.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid cols2" style="margin-top:16px">
+        <div class="card">
+          <h2>Assegna utente a team</h2>
+          <div class="form-grid">
+            <div class="span2">
+              <label>Email utente già registrato</label>
+              <input id="memberEmail" placeholder="email consulente o gestore">
+            </div>
+            <div>
+              <label>Team</label>
+              <select id="memberTeamSelect"></select>
+            </div>
+            <div>
+              <label>Ruolo nel team</label>
+              <select id="memberRoleSelect">
+                <option value="consultant">Consulente</option>
+                <option value="team_manager">Gestore team</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="blue" onclick="addTeamMemberByEmail()">Aggiungi / aggiorna membro</button>
+          </div>
+          <p class="mini">Se l'utente non compare, deve prima registrarsi dal login del CRM.</p>
+        </div>
+
+        <div class="card">
+          <h2>Membri team</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Team</th><th>Utente</th><th>Ruolo</th><th>Attivo</th><th>Azione</th></tr></thead>
+              <tbody id="membershipsTable"><tr><td colspan="5" class="muted">Nessuna assegnazione.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="settingsPanel" class="panel">
       <div class="grid cols2">
         <div class="card">
@@ -611,6 +711,11 @@ const defaultCommissions = {
 };
 
 let currentUser = null;
+let currentProfile = null;
+let profiles = [];
+let teams = [];
+let memberships = [];
+let accessContextReady = false;
 let leads = [];
 let calls = [];
 let appointments = [];
@@ -679,6 +784,207 @@ function leadHay(l) {
 function leadNameById(id) { return leads.find(l => l.id === id)?.name || ""; }
 function leadById(id) { return leads.find(l => l.id === id) || null; }
 
+
+function roleLabel(role) {
+  if (role === "superadmin") return "Superadministrator";
+  if (role === "team_manager") return "Gestore team";
+  if (role === "consultant") return "Consulente";
+  if (role === "single_user") return "Utente singolo";
+  return role || "Ruolo";
+}
+function teamRoleLabel(role) {
+  if (role === "team_manager") return "Gestore team";
+  if (role === "consultant") return "Consulente";
+  return role || "";
+}
+function canManageUsers() {
+  return ["superadmin","team_manager"].includes(currentProfile?.global_role);
+}
+function isSuperAdmin() {
+  return currentProfile?.global_role === "superadmin";
+}
+function profileById(id) {
+  return profiles.find(p => p.user_id === id) || null;
+}
+function profileByEmail(email) {
+  return profiles.find(p => String(p.email || "").toLowerCase() === String(email || "").toLowerCase()) || null;
+}
+function teamById(id) {
+  return teams.find(t => t.id === id) || null;
+}
+async function refreshAccessContext() {
+  accessContextReady = false;
+  currentProfile = null;
+  profiles = [];
+  teams = [];
+  memberships = [];
+
+  try {
+    let { data: profile, error: profileErr } = await sb.from("profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
+    if (profileErr) throw profileErr;
+
+    if (!profile) {
+      const fallback = {
+        user_id: currentUser.id,
+        email: currentUser.email || "",
+        display_name: currentUser.email || "",
+        global_role: (currentUser.email || "").toLowerCase() === "filippoparisi62@gmail.com" ? "superadmin" : "consultant",
+        active: true
+      };
+      const up = await sb.from("profiles").upsert(fallback, { onConflict:"user_id" }).select("*").maybeSingle();
+      if (!up.error) profile = up.data;
+    }
+
+    currentProfile = profile || { user_id: currentUser.id, email: currentUser.email || "", global_role:"consultant", active:true };
+
+    const [profilesRes, teamsRes, membershipsRes] = await Promise.all([
+      sb.from("profiles").select("*").order("email"),
+      sb.from("teams").select("*").order("name"),
+      sb.from("team_members").select("*").order("created_at", { ascending:false })
+    ]);
+
+    profiles = profilesRes.error ? [currentProfile] : (profilesRes.data || []);
+    teams = teamsRes.error ? [] : (teamsRes.data || []);
+    memberships = membershipsRes.error ? [] : (membershipsRes.data || []);
+    accessContextReady = true;
+  } catch(e) {
+    console.warn("Multiutenza non inizializzata:", e);
+    currentProfile = { user_id: currentUser.id, email: currentUser.email || "", display_name: currentUser.email || "", global_role:"single_user", active:true };
+    profiles = [currentProfile];
+    teams = [];
+    memberships = [];
+    accessContextReady = false;
+  }
+  renderAuth();
+}
+function renderLeadAssignmentBox() {
+  if (!selectedLead || !canManageUsers() || !accessContextReady) return "";
+  const profileOptions = profiles.map(p => `<option value="${p.user_id}" ${selectedLead.assigned_to === p.user_id ? "selected" : ""}>${escapeHtml(p.email || p.display_name || p.user_id)} - ${escapeHtml(roleLabel(p.global_role))}</option>`).join("");
+  const teamOptions = `<option value="">Nessun team</option>` + teams.map(t => `<option value="${t.id}" ${selectedLead.team_id === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
+  return `<div class="notice" style="margin-top:14px">
+    <strong>Assegnazione lead</strong>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="span2"><label>Assegnato a</label><select id="leadAssignedTo">${profileOptions}</select></div>
+      <div class="span2"><label>Team</label><select id="leadTeamId">${teamOptions}</select></div>
+      <div class="span4 row"><button class="blue small" onclick="saveLeadAssignment('${selectedLead.id}')">Salva assegnazione lead</button></div>
+    </div>
+  </div>`;
+}
+async function saveLeadAssignment(leadId) {
+  if (!canManageUsers()) return toast("Permesso insufficiente");
+  const assigned_to = document.getElementById("leadAssignedTo")?.value || null;
+  const team_id = document.getElementById("leadTeamId")?.value || null;
+  const { error } = await sb.from("leads").update({ assigned_to, team_id }).eq("id", leadId);
+  if (error) return toast(error.message);
+  toast("Lead assegnato");
+  await refreshAll();
+  selectLead(leadId);
+}
+function renderUsersPanel() {
+  const roleBox = document.getElementById("myRoleBox");
+  if (roleBox) roleBox.textContent = currentProfile ? roleLabel(currentProfile.global_role) : "Ruolo non caricato";
+
+  const profilesTable = document.getElementById("profilesTable");
+  const teamsTable = document.getElementById("teamsTable");
+  const membershipsTable = document.getElementById("membershipsTable");
+  const teamSelect = document.getElementById("memberTeamSelect");
+  if (!profilesTable || !teamsTable || !membershipsTable || !teamSelect) return;
+
+  if (!accessContextReady) {
+    profilesTable.innerHTML = `<tr><td colspan="5" class="muted">Multiutenza non ancora inizializzata. Esegui prima la migrazione SQL v33 in Supabase.</td></tr>`;
+    teamsTable.innerHTML = `<tr><td colspan="3" class="muted">Esegui prima la migrazione SQL v33.</td></tr>`;
+    membershipsTable.innerHTML = `<tr><td colspan="5" class="muted">Esegui prima la migrazione SQL v33.</td></tr>`;
+    teamSelect.innerHTML = "";
+    return;
+  }
+
+  profilesTable.innerHTML = profiles.map(p => {
+    const editable = isSuperAdmin() && p.user_id !== currentUser.id;
+    const roleControl = editable
+      ? `<select class="inline-select" id="role_${p.user_id}"><option value="superadmin" ${p.global_role==="superadmin"?"selected":""}>Superadministrator</option><option value="team_manager" ${p.global_role==="team_manager"?"selected":""}>Gestore team</option><option value="consultant" ${p.global_role==="consultant"?"selected":""}>Consulente</option></select>`
+      : `<span class="pill">${escapeHtml(roleLabel(p.global_role))}</span>`;
+    const activeControl = editable
+      ? `<select class="inline-select" id="active_${p.user_id}"><option value="true" ${p.active ? "selected" : ""}>Sì</option><option value="false" ${!p.active ? "selected" : ""}>No</option></select>`
+      : (p.active ? "Sì" : "No");
+    return `<tr>
+      <td>${escapeHtml(p.email || "")}</td>
+      <td>${escapeHtml(p.display_name || "")}</td>
+      <td>${roleControl}</td>
+      <td>${activeControl}</td>
+      <td>${editable ? `<button class="small brand" onclick="saveProfileRole('${p.user_id}')">Salva</button>` : ""}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" class="muted">Nessun profilo visibile.</td></tr>`;
+
+  teamsTable.innerHTML = teams.map(t => `<tr>
+    <td>${escapeHtml(t.name)}</td>
+    <td>${escapeHtml(profileById(t.owner_id)?.email || t.owner_id || "")}</td>
+    <td>${canManageUsers() ? `<button class="small ghost" onclick="deleteTeam('${t.id}')">Elimina</button>` : ""}</td>
+  </tr>`).join("") || `<tr><td colspan="3" class="muted">Nessun team.</td></tr>`;
+
+  teamSelect.innerHTML = teams.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+
+  membershipsTable.innerHTML = memberships.map(m => `<tr>
+    <td>${escapeHtml(teamById(m.team_id)?.name || m.team_id || "")}</td>
+    <td>${escapeHtml(profileById(m.user_id)?.email || m.user_id || "")}</td>
+    <td>${escapeHtml(teamRoleLabel(m.team_role))}</td>
+    <td>${m.active ? "Sì" : "No"}</td>
+    <td>${canManageUsers() ? `<button class="small ghost" onclick="toggleMembership('${m.id}', ${m.active ? "false" : "true"})">${m.active ? "Disattiva" : "Attiva"}</button>` : ""}</td>
+  </tr>`).join("") || `<tr><td colspan="5" class="muted">Nessuna assegnazione.</td></tr>`;
+}
+async function saveProfileRole(userId) {
+  if (!isSuperAdmin()) return toast("Solo il superadministrator può modificare ruoli globali");
+  const role = document.getElementById("role_" + userId)?.value;
+  const active = document.getElementById("active_" + userId)?.value === "true";
+  const { error } = await sb.from("profiles").update({ global_role:role, active }).eq("user_id", userId);
+  if (error) return toast(error.message);
+  toast("Profilo aggiornato");
+  await refreshAll();
+}
+async function createTeam() {
+  if (!canManageUsers()) return toast("Permesso insufficiente");
+  const name = document.getElementById("newTeamName")?.value.trim();
+  if (!name) return toast("Inserisci nome team");
+  const { error } = await sb.from("teams").insert({ name, owner_id:currentUser.id });
+  if (error) return toast(error.message);
+  document.getElementById("newTeamName").value = "";
+  toast("Team creato");
+  await refreshAll();
+}
+async function deleteTeam(teamId) {
+  if (!canManageUsers()) return toast("Permesso insufficiente");
+  if (!confirm("Eliminare il team? I lead resteranno, ma perderanno il collegamento al team se previsto dalle regole database.")) return;
+  const { error } = await sb.from("teams").delete().eq("id", teamId);
+  if (error) return toast(error.message);
+  toast("Team eliminato");
+  await refreshAll();
+}
+async function addTeamMemberByEmail() {
+  if (!canManageUsers()) return toast("Permesso insufficiente");
+  const email = document.getElementById("memberEmail")?.value.trim().toLowerCase();
+  const team_id = document.getElementById("memberTeamSelect")?.value;
+  const team_role = document.getElementById("memberRoleSelect")?.value;
+  if (!email || !team_id || !team_role) return toast("Completa email, team e ruolo");
+
+  const user = profileByEmail(email);
+  if (!user) return toast("Utente non trovato: deve prima registrarsi al CRM");
+
+  const id = "member_" + team_id + "_" + user.user_id;
+  const { error } = await sb.from("team_members").upsert({
+    id, team_id, user_id:user.user_id, team_role, active:true
+  }, { onConflict:"id" });
+  if (error) return toast(error.message);
+  document.getElementById("memberEmail").value = "";
+  toast("Membro team aggiornato");
+  await refreshAll();
+}
+async function toggleMembership(id, active) {
+  if (!canManageUsers()) return toast("Permesso insufficiente");
+  const { error } = await sb.from("team_members").update({ active }).eq("id", id);
+  if (error) return toast(error.message);
+  toast(active ? "Membro attivato" : "Membro disattivato");
+  await refreshAll();
+}
+
 async function init() {
   const remembered = localStorage.getItem("crm_fp_email");
   if (remembered) {
@@ -693,6 +999,11 @@ async function init() {
 function renderAuth() {
   const logged = !!currentUser;
   document.getElementById("userPill").textContent = logged ? "Login: " + currentUser.email : "Non loggato";
+  const rolePill = document.getElementById("rolePill");
+  if (rolePill) {
+    rolePill.textContent = currentProfile ? roleLabel(currentProfile.global_role) : "Ruolo non caricato";
+    rolePill.classList.toggle("hidden", !logged);
+  }
   document.getElementById("authSection").classList.toggle("hidden", logged);
   document.getElementById("appSection").classList.toggle("hidden", !logged);
   document.getElementById("navTabs").classList.toggle("hidden", !logged);
@@ -731,7 +1042,7 @@ async function magicLink() {
 async function logout() {
   await sb.auth.signOut();
   currentUser = null;
-  leads = []; calls = []; appointments = []; sales = []; saleItems = []; selectedLead = null;
+  currentProfile = null; profiles = []; teams = []; memberships = []; accessContextReady = false; leads = []; calls = []; appointments = []; sales = []; saleItems = []; selectedLead = null;
   renderAuth();
   toast("Logout effettuato");
 }
@@ -747,6 +1058,7 @@ function showPanel(panelId) {
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === panelId));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.panel === panelId));
   if (panelId === "calendarPanel") renderCalendar();
+  if (panelId === "usersPanel") renderUsersPanel();
 }
 function toggleMoneyPrivacy() {
   hideMoney = !hideMoney;
@@ -766,6 +1078,7 @@ function renderMoneyButtons() {
 
 async function refreshAll() {
   if (!currentUser) return;
+  await refreshAccessContext();
   const [leadRes, callRes, appRes, saleRes, itemRes, commRes] = await Promise.all([
     sb.from("leads").select("*", { count:"exact" }).order("created_at", { ascending:false }).limit(leadLimit),
     sb.from("calls").select("*").order("call_date", { ascending:false }).limit(300),
@@ -830,6 +1143,7 @@ function renderAll() {
   renderStatsPanel();
   renderCommissionSettings();
   renderExportFilters();
+  renderUsersPanel();
   renderMoneyButtons();
 }
 function renderKpis() {
@@ -959,7 +1273,8 @@ function renderSelectedLead() {
       <div><strong>Interesse</strong>${escapeHtml(selectedLead.interest || "")}</div>
       <div><strong>Stato</strong>${escapeHtml(selectedLead.status || "")}</div>
     </div>
-    <div style="margin-top:12px"><strong class="mini">NOTE</strong><br>${escapeHtml(selectedLead.notes || "").replace(/\n/g,"<br>")}</div>`;
+    <div style="margin-top:12px"><strong class="mini">NOTE</strong><br>${escapeHtml(selectedLead.notes || "").replace(/\n/g,"<br>")}</div>
+    ${renderLeadAssignmentBox()}`;
   const lc = calls.filter(c => c.lead_id === selectedLead.id).sort((a,b) => new Date(b.call_date||0)-new Date(a.call_date||0));
   const la = appointments.filter(a => a.lead_id === selectedLead.id).sort((a,b) => new Date(b.appointment_date||0)-new Date(a.appointment_date||0));
   const ls = sales.filter(s => s.lead_id === selectedLead.id).sort((a,b) => new Date(b.sale_date||0)-new Date(a.sale_date||0));
@@ -2174,13 +2489,15 @@ function leadExportRow(l) {
     "Priorità": l.priority || "",
     "Prossimo follow-up": fmtDateTime(l.next_follow_up),
     "Operatore": l.operator || "",
+    "Assegnato a": profileById(l.assigned_to)?.email || l.assigned_to || "",
+    "Team": teamById(l.team_id)?.name || l.team_id || "",
     "Note": l.notes || "",
     "Creato il": fmtDateTime(l.created_at),
     "Aggiornato il": fmtDateTime(l.updated_at)
   };
 }
 function exportLeadsCsv(returnOnly=false) {
-  const headers = ["Nome","Telefono","Email","Codice cliente","Indirizzo","Città","Lista","POD","PDR","Fonte","Interesse","Stato","Priorità","Prossimo follow-up","Operatore","Note","Creato il","Aggiornato il"];
+  const headers = ["Nome","Telefono","Email","Codice cliente","Indirizzo","Città","Lista","POD","PDR","Fonte","Interesse","Stato","Priorità","Prossimo follow-up","Operatore","Assegnato a","Team","Note","Creato il","Aggiornato il"];
   const rows = filteredLeadsForExport().map(leadExportRow);
   const csv = makeCsv(headers, rows);
   if (returnOnly) return csv;
