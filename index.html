@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v24 Operativa</title>
+  <title>CRM F.P. Consulting v25 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -195,7 +195,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v24 Operativa</div>
+          <div>CRM F.P. Consulting v25 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -761,7 +761,10 @@ function renderSelectedLead() {
 
 function renderDashboardLists() {
   const today = todayISODate();
-  const todayApps = appointments.filter(a => localDateKey(a.appointment_date) === today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
+  const closedAppointmentOutcomes = ["Venduto","Perso","Non presentato","Effettuato positivo"];
+  const todayApps = appointments
+    .filter(a => localDateKey(a.appointment_date) === today && !closedAppointmentOutcomes.includes(a.outcome || ""))
+    .sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
   document.getElementById("todayAppointmentsBox").innerHTML = todayApps.map(a => {
     const l = leadById(a.lead_id);
     return `<div class="task clickable" onclick="openAppointmentEditModal('${a.id}')" title="Apri appuntamento">
@@ -1026,7 +1029,7 @@ function openAppointmentEditModal(appId) {
       <div class="span2"><label>Luogo</label><input id="eAppPlace" value="${escapeHtml(app.place || "")}"></div>
       <div><label>Esito appuntamento</label><select id="eAppOutcome" onchange="autoEditAppOutcome()">${outcomes.map(o => `<option ${o === (app.outcome || "") ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select></div>
       <div><label>Nuovo follow-up</label><input id="eAppNext" type="datetime-local" value="${app.next_follow_up ? datetimeLocalFromIso(app.next_follow_up) : ""}"></div>
-      <div class="span4"><label><input id="eAppOpenSale" type="checkbox" style="width:auto" ${app.outcome === "Venduto" ? "checked" : ""}> Se esito Venduto, apri vendita dopo il salvataggio</label></div>
+      <div class="span4"><label><input id="eAppOpenSale" type="checkbox" style="width:auto" ${app.outcome === "Venduto" ? "checked" : ""}> Apri scheda vendita dopo il salvataggio</label></div>
       <div class="span4"><label>Note appuntamento</label><textarea id="eAppNotes">${escapeHtml(app.notes || "")}</textarea></div>
       <div class="span4 row">
         <button class="brand" onclick="saveAppointmentUpdate('${app.id}')">Salva aggiornamento appuntamento</button>
@@ -1054,22 +1057,36 @@ function statusFromAppointmentOutcome(outcome) {
 async function saveAppointmentUpdate(appId, forceSale=false) {
   const app = appointments.find(a => a.id === appId);
   if (!app) return toast("Appuntamento non trovato");
+
+  const wantsSale = forceSale || !!document.getElementById("eAppOpenSale")?.checked;
+  let outcome = document.getElementById("eAppOutcome").value;
+
+  // Se l'utente chiede di aprire la vendita, l'appuntamento deve uscire dalla dashboard dei "Da fare".
+  // Quindi lo marchiamo come Venduto anche se il select era rimasto su "Da fare".
+  if (wantsSale && outcome !== "Venduto") {
+    outcome = "Venduto";
+  }
+
   const patch = {
     appointment_date: toIsoOrNull(document.getElementById("eAppDate").value),
     type: document.getElementById("eAppType").value,
     place: document.getElementById("eAppPlace").value.trim(),
-    outcome: document.getElementById("eAppOutcome").value,
+    outcome,
     next_follow_up: toIsoOrNull(document.getElementById("eAppNext").value),
     notes: document.getElementById("eAppNotes").value.trim()
   };
+
   const { error } = await sb.from("appointments").update(patch).eq("id", appId);
   if (error) return toast(error.message);
+
   await updateLeadAfterActivity(app.lead_id, statusFromAppointmentOutcome(patch.outcome), patch.next_follow_up || patch.appointment_date);
+
   closeModal();
   await refreshAll();
   selectLead(app.lead_id);
-  toast("Appuntamento aggiornato");
-  if (forceSale || (patch.outcome === "Venduto" && document.getElementById("eAppOpenSale")?.checked)) {
+  toast(wantsSale ? "Appuntamento aggiornato: vendita pronta" : "Appuntamento aggiornato");
+
+  if (wantsSale) {
     openSaleModal(app.lead_id, appId);
   }
 }
@@ -1089,6 +1106,7 @@ function openSaleModal(leadId=null, appointmentId=null) {
         <div id="mSaleItems" style="margin-top:10px"></div>
       </div>
       <div class="span4"><label>Note</label><textarea id="mSaleNotes">${escapeHtml(note)}</textarea></div>
+      <input id="mSaleAppointmentId" type="hidden" value="${escapeHtml(appointmentId || "")}">
       <div class="span4 row"><button class="good" onclick="saveSaleFromModal('${l.id}')">Salva vendita</button></div>
     </div>`);
   addSaleItemRow({ product: products.includes(l.interest) ? l.interest : "Luce", qty:1, value:0, rid:"NO", commission_manual:null });
@@ -1107,6 +1125,7 @@ function addSaleItemRow(item={}) {
   box.appendChild(div);
 }
 async function saveSaleFromModal(leadId) {
+  const linkedAppointmentId = document.getElementById("mSaleAppointmentId")?.value || "";
   const saleId = id("sale");
   const sale = {
     id:saleId, user_id:currentUser.id, lead_id:leadId,
@@ -1129,7 +1148,12 @@ async function saveSaleFromModal(leadId) {
   if (error) return toast(error.message);
   const itemRes = await sb.from("sale_items").insert(items);
   if (itemRes.error) return toast(itemRes.error.message);
-  if (sale.status !== "Annullata") await updateLeadAfterActivity(leadId, "Venduto", null);
+  if (sale.status !== "Annullata") {
+    await updateLeadAfterActivity(leadId, "Venduto", null);
+    if (linkedAppointmentId) {
+      await sb.from("appointments").update({ outcome:"Venduto", next_follow_up:null }).eq("id", linkedAppointmentId);
+    }
+  }
   closeModal();
   await refreshAll();
   selectLead(leadId);
