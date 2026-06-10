@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v20 Operativa</title>
+  <title>CRM F.P. Consulting v21 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -193,7 +193,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v20 Operativa</div>
+          <div>CRM F.P. Consulting v21 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -756,11 +756,12 @@ function renderDashboardLists() {
     return `<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(l?.name || "")}</strong><div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div></div><button class="small good" onclick="openSaleModal('${a.lead_id}', '${a.id}')">Vendita</button></div>`;
   }).join("") || `<p class="muted">Nessun appuntamento oggi.</p>`;
 
-  const due = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status)).slice(0,8);
-  document.getElementById("dueFollowupsBox").innerHTML = due.map(l => `<div class="task"><span class="pill bad">Scaduto</span><div style="flex:1"><strong>${escapeHtml(l.name)}</strong><div class="mini">${fmtDateTime(l.next_follow_up)} • ${escapeHtml(l.phone || "")}</div></div><button class="small blue" onclick="selectLead('${l.id}'); openCallModal()">Chiama</button></div>`).join("") || `<p class="muted">Nessun follow-up scaduto.</p>`;
+  const allDue = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status));
+  const duePreview = allDue.slice(0,8);
+  document.getElementById("dueFollowupsBox").innerHTML = duePreview.map(l => `<div class="task"><span class="pill bad">Scaduto</span><div style="flex:1"><strong>${escapeHtml(l.name)}</strong><div class="mini">${fmtDateTime(l.next_follow_up)} • ${escapeHtml(l.phone || "")}</div></div><button class="small blue" onclick="selectLead('${l.id}'); openCallModal()">Chiama</button></div>`).join("") + (allDue.length > duePreview.length ? `<p class="mini" style="margin-top:8px">Mostrati i primi ${duePreview.length} di ${allDue.length} follow-up scaduti.</p>` : "") || `<p class="muted">Nessun follow-up scaduto.</p>`;
 
   const adv = [];
-  if (due.length) adv.push(["bad","Recupera follow-up scaduti",`${due.length} lead richiedono attenzione.`]);
+  if (allDue.length) adv.push(["bad","Recupera follow-up scaduti",`${allDue.length} lead richiedono attenzione. In dashboard ne vedi i primi ${Math.min(8, allDue.length)}.`]);
   if (!todayApps.length) adv.push(["blue","Agenda libera","Puoi spingere su chiamate e fissare nuovi slot."]);
   const active = leads.filter(l => !["Venduto","Perso","Non interessato"].includes(l.status)).length;
   adv.push(["warn","Lead attivi",`${active} contatti non ancora chiusi.`]);
