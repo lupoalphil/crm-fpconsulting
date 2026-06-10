@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v26 Operativa</title>
+  <title>CRM F.P. Consulting v27 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -170,6 +170,13 @@
       letter-spacing:.18em; font-weight:950; color:#111827;
       background:#f3f4f6; border-radius:8px; padding:2px 7px; white-space:nowrap;
     }
+    .bar-track { height:10px; background:#f3f4f6; border-radius:999px; overflow:hidden; margin-top:6px; }
+    .bar-fill { height:100%; background:linear-gradient(90deg,var(--brand),#ef4444); border-radius:999px; }
+    .metric-line { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); }
+    .metric-line:last-child { border-bottom:0; }
+    .delta.up { color:var(--good); font-weight:900; }
+    .delta.down { color:var(--bad); font-weight:900; }
+    .delta.flat { color:var(--muted); font-weight:900; }
     .toast {
       position:fixed; bottom:20px; right:20px; background:#111827; color:white;
       padding:12px 14px; border-radius:13px; box-shadow:var(--shadow);
@@ -195,7 +202,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v26 Operativa</div>
+          <div>CRM F.P. Consulting v27 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -212,6 +219,7 @@
       <button class="tab" data-panel="leadsPanel" onclick="showPanel('leadsPanel')">Lead</button>
       <button class="tab" data-panel="calendarPanel" onclick="showPanel('calendarPanel')">Calendario</button>
       <button class="tab" data-panel="salesPanel" onclick="showPanel('salesPanel')">Vendite</button>
+      <button class="tab" data-panel="statsPanel" onclick="showPanel('statsPanel')">Statistiche</button>
       <button class="tab" data-panel="activitiesPanel" onclick="showPanel('activitiesPanel')">Attività</button>
       <button class="tab" data-panel="settingsPanel" onclick="showPanel('settingsPanel')">Impostazioni</button>
       <button class="tab" data-panel="importPanel" onclick="showPanel('importPanel')">Import</button>
@@ -336,6 +344,59 @@
       <div class="card" style="margin-top:16px">
         <h2>Vendite recenti</h2>
         <div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotti</th><th>Valore</th><th>Provvigione</th><th>Stato</th><th>Azione</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="statsPanel" class="panel">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">Statistiche commerciali</h2>
+          <select id="statsRange" style="width:auto" onchange="renderStatsPanel()">
+            <option value="all">Tutto</option>
+            <option value="week">Settimana corrente</option>
+            <option value="month" selected>Mese corrente</option>
+            <option value="year">Anno corrente</option>
+          </select>
+        </div>
+        <p class="mini" style="margin-top:8px">Le statistiche usano i dati caricati da Supabase: lead, chiamate, appuntamenti, vendite e righe prodotto.</p>
+      </div>
+
+      <div class="grid cols6" id="statsKpis" style="margin-top:16px"></div>
+
+      <div class="grid cols3" style="margin-top:16px">
+        <div class="card">
+          <h2>Funnel</h2>
+          <div id="statsFunnel"></div>
+        </div>
+        <div class="card">
+          <h2>Venduto per prodotto</h2>
+          <div id="statsProducts"></div>
+        </div>
+        <div class="card">
+          <h2>Scostamenti</h2>
+          <div id="statsDeltas"></div>
+        </div>
+      </div>
+
+      <div class="grid cols2" style="margin-top:16px">
+        <div class="card">
+          <h2>Andamento settimanale</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Settimana</th><th>Chiamate</th><th>App.</th><th>Vendite</th><th>Valore</th><th>Provv.</th></tr></thead>
+              <tbody id="statsWeeklyTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Andamento mensile</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mese</th><th>Chiamate</th><th>App.</th><th>Vendite</th><th>Valore</th><th>Provv.</th></tr></thead>
+              <tbody id="statsMonthlyTable"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -627,6 +688,7 @@ function renderAll() {
   renderSalesPanel();
   renderActivities();
   renderCalendar();
+  renderStatsPanel();
   renderCommissionSettings();
   renderMoneyButtons();
 }
@@ -794,6 +856,222 @@ function renderDashboardLists() {
   adv.push(["warn","Lead attivi",`${active} contatti non ancora chiusi.`]);
   document.getElementById("adviceBox").innerHTML = adv.map(a => `<div class="task"><span class="pill ${a[0]}">${a[0]==="bad"?"Urgenza":a[0]==="blue"?"Opportunità":"Info"}</span><div><strong>${a[1]}</strong><div class="mini">${a[2]}</div></div></div>`).join("");
 }
+
+function startOfWeek(d) {
+  const x = new Date(d);
+  x.setHours(0,0,0,0);
+  const day = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - day);
+  return x;
+}
+function startOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function startOfYear(d) {
+  return new Date(d.getFullYear(), 0, 1);
+}
+function endOfPeriod(start, range) {
+  const e = new Date(start);
+  if (range === "week") e.setDate(e.getDate() + 7);
+  else if (range === "month") e.setMonth(e.getMonth() + 1);
+  else if (range === "year") e.setFullYear(e.getFullYear() + 1);
+  else return null;
+  return e;
+}
+function periodStartForRange(range, offset=0) {
+  const now = new Date();
+  let s;
+  if (range === "week") { s = startOfWeek(now); s.setDate(s.getDate() + offset * 7); }
+  else if (range === "month") { s = startOfMonth(now); s.setMonth(s.getMonth() + offset); }
+  else if (range === "year") { s = startOfYear(now); s.setFullYear(s.getFullYear() + offset); }
+  else return null;
+  return s;
+}
+function inDateRange(value, start, end) {
+  if (!start) return true;
+  if (!value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return d >= start && (!end || d < end);
+}
+function rangeLabel(range) {
+  if (range === "week") return "settimana";
+  if (range === "month") return "mese";
+  if (range === "year") return "anno";
+  return "totale";
+}
+function pct(n, d) {
+  if (!d) return "0,0%";
+  return (n * 100 / d).toLocaleString("it-IT", { minimumFractionDigits:1, maximumFractionDigits:1 }) + "%";
+}
+function rawPct(n, d) {
+  return d ? (n * 100 / d) : 0;
+}
+function periodFilter(range, offset=0) {
+  if (range === "all") return { start:null, end:null };
+  const start = periodStartForRange(range, offset);
+  return { start, end:endOfPeriod(start, range) };
+}
+function validSalesInRange(start, end) {
+  return sales.filter(s => s.status !== "Annullata" && inDateRange(s.sale_date, start, end));
+}
+function callsInRange(start, end) {
+  return calls.filter(c => inDateRange(c.call_date, start, end));
+}
+function appointmentsInRange(start, end) {
+  return appointments.filter(a => inDateRange(a.appointment_date, start, end));
+}
+function salesValue(list) {
+  return list.reduce((sum,s) => sum + saleTotalValue(s), 0);
+}
+function salesCommission(list) {
+  return list.reduce((sum,s) => sum + saleCommission(s), 0);
+}
+function deltaText(current, previous, moneyMode=false) {
+  const diff = current - previous;
+  const cls = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const sign = diff > 0 ? "+" : "";
+  const value = moneyMode ? plainMoney(diff) : sign + diff.toLocaleString("it-IT");
+  const pctVal = previous ? ` (${sign}${((diff / previous) * 100).toLocaleString("it-IT", { maximumFractionDigits:1 })}%)` : "";
+  return `<span class="delta ${cls}">${value}${pctVal}</span>`;
+}
+function productStatsForSales(saleList) {
+  const ids = new Set(saleList.map(s => s.id));
+  const map = {};
+  saleItems.filter(i => ids.has(i.sale_id)).forEach(i => {
+    const p = i.product || "Altro";
+    if (!map[p]) map[p] = { product:p, qty:0, value:0, commission:0 };
+    map[p].qty += Number(i.qty || 1);
+    map[p].value += Number(i.value || 0);
+    map[p].commission += saleItemCommission(i);
+  });
+  return Object.values(map).sort((a,b) => b.value - a.value || b.qty - a.qty);
+}
+function weekKey(value) {
+  const d = startOfWeek(new Date(value));
+  return localDateKey(d);
+}
+function monthKey(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+function renderStatsPanel() {
+  const root = document.getElementById("statsPanel");
+  if (!root) return;
+
+  const range = document.getElementById("statsRange")?.value || "month";
+  const { start, end } = periodFilter(range, 0);
+  const prev = range === "all" ? { start:null, end:null } : periodFilter(range, -1);
+
+  const c = callsInRange(start, end);
+  const a = appointmentsInRange(start, end);
+  const s = validSalesInRange(start, end);
+
+  const prevC = callsInRange(prev.start, prev.end);
+  const prevA = appointmentsInRange(prev.start, prev.end);
+  const prevS = validSalesInRange(prev.start, prev.end);
+
+  const value = salesValue(s);
+  const commission = salesCommission(s);
+  const prevValue = salesValue(prevS);
+  const prevCommission = salesCommission(prevS);
+
+  const callToApp = rawPct(a.length, c.length);
+  const callToSale = rawPct(s.length, c.length);
+  const appToSale = rawPct(s.length, a.length);
+
+  document.getElementById("statsKpis").innerHTML = [
+    ["Chiamate", c.length, `nel ${rangeLabel(range)}`],
+    ["Appuntamenti", a.length, `${pct(a.length, c.length)} su chiamate`],
+    ["Vendite", s.length, `${pct(s.length, c.length)} su chiamate`],
+    ["Valore venduto", plainMoney(value), "non annullato"],
+    ["Provvigioni", plainMoney(commission), "stimate"],
+    ["Lead attivi", leads.filter(l => !["Venduto","Perso","Non interessato"].includes(l.status)).length, "non chiusi"]
+  ].map(k => `<div class="kpi"><div class="label">${escapeHtml(k[0])}</div><div class="value">${escapeHtml(String(k[1]))}</div><div class="hint">${escapeHtml(k[2])}</div></div>`).join("");
+
+  document.getElementById("statsFunnel").innerHTML = [
+    ["Chiamate → Appuntamenti", callToApp],
+    ["Chiamate → Vendite", callToSale],
+    ["Appuntamenti → Vendite", appToSale]
+  ].map(x => `<div class="metric-line"><div><strong>${escapeHtml(x[0])}</strong><div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,x[1])}%"></div></div></div><strong>${x[1].toLocaleString("it-IT",{minimumFractionDigits:1,maximumFractionDigits:1})}%</strong></div>`).join("");
+
+  const productRows = productStatsForSales(s);
+  const maxValue = Math.max(1, ...productRows.map(p => p.value));
+  document.getElementById("statsProducts").innerHTML = productRows.length ? productRows.map(p => `
+    <div class="metric-line">
+      <div style="flex:1">
+        <strong>${escapeHtml(p.product)}</strong>
+        <div class="mini">Q.tà ${p.qty} • Provv. ${plainMoney(p.commission)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, p.value * 100 / maxValue)}%"></div></div>
+      </div>
+      <strong>${plainMoney(p.value)}</strong>
+    </div>`).join("") : `<p class="muted">Nessuna vendita nel periodo.</p>`;
+
+  document.getElementById("statsDeltas").innerHTML = range === "all"
+    ? `<p class="muted">Gli scostamenti sono disponibili su settimana, mese o anno.</p>`
+    : [
+        ["Chiamate", c.length, prevC.length, false],
+        ["Appuntamenti", a.length, prevA.length, false],
+        ["Vendite", s.length, prevS.length, false],
+        ["Valore venduto", value, prevValue, true],
+        ["Provvigioni", commission, prevCommission, true],
+      ].map(x => `<div class="metric-line"><span>${escapeHtml(x[0])}</span>${deltaText(x[1], x[2], x[3])}</div>`).join("");
+
+  renderStatsTables();
+}
+function renderStatsTables() {
+  const weekly = {};
+  calls.forEach(c => {
+    if (!c.call_date) return;
+    const k = weekKey(c.call_date);
+    weekly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    weekly[k].calls++;
+  });
+  appointments.forEach(a => {
+    if (!a.appointment_date) return;
+    const k = weekKey(a.appointment_date);
+    weekly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    weekly[k].apps++;
+  });
+  sales.filter(s => s.status !== "Annullata").forEach(s => {
+    if (!s.sale_date) return;
+    const k = weekKey(s.sale_date);
+    weekly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    weekly[k].sales++;
+    weekly[k].value += saleTotalValue(s);
+    weekly[k].commission += saleCommission(s);
+  });
+
+  document.getElementById("statsWeeklyTable").innerHTML = Object.entries(weekly).sort((a,b) => b[0].localeCompare(a[0])).slice(0,12).map(([k,v]) => `
+    <tr><td>${escapeHtml(k)}</td><td>${v.calls}</td><td>${v.apps}</td><td>${v.sales}</td><td>${money(v.value)}</td><td>${money(v.commission)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nessun dato.</td></tr>`;
+
+  const monthly = {};
+  calls.forEach(c => {
+    if (!c.call_date) return;
+    const k = monthKey(c.call_date);
+    monthly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    monthly[k].calls++;
+  });
+  appointments.forEach(a => {
+    if (!a.appointment_date) return;
+    const k = monthKey(a.appointment_date);
+    monthly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    monthly[k].apps++;
+  });
+  sales.filter(s => s.status !== "Annullata").forEach(s => {
+    if (!s.sale_date) return;
+    const k = monthKey(s.sale_date);
+    monthly[k] ||= { calls:0, apps:0, sales:0, value:0, commission:0 };
+    monthly[k].sales++;
+    monthly[k].value += saleTotalValue(s);
+    monthly[k].commission += saleCommission(s);
+  });
+
+  document.getElementById("statsMonthlyTable").innerHTML = Object.entries(monthly).sort((a,b) => b[0].localeCompare(a[0])).slice(0,18).map(([k,v]) => `
+    <tr><td>${escapeHtml(k)}</td><td>${v.calls}</td><td>${v.apps}</td><td>${v.sales}</td><td>${money(v.value)}</td><td>${money(v.commission)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nessun dato.</td></tr>`;
+}
+
 function renderActivities() {
   document.getElementById("recentCallsTable").innerHTML = calls.slice(0,30).map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna chiamata.</td></tr>`;
   document.getElementById("recentAppointmentsTable").innerHTML = appointments.slice(0,30).map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
