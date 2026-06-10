@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v22 Operativa</title>
+  <title>CRM F.P. Consulting v23 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -193,7 +193,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v22 Operativa</div>
+          <div>CRM F.P. Consulting v23 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -289,7 +289,7 @@
         </div>
         <div class="card">
           <h2>Storico appuntamenti</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Esito</th><th>Luogo</th></tr></thead><tbody id="leadAppointmentsTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Esito</th><th>Luogo</th><th>Azione</th></tr></thead><tbody id="leadAppointmentsTable"></tbody></table></div>
         </div>
         <div class="card">
           <h2>Storico vendite</h2>
@@ -345,7 +345,7 @@
         </div>
         <div class="card">
           <h2>Ultimi appuntamenti</h2>
-          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Luogo</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Lead</th><th>Esito</th><th>Luogo</th><th>Azione</th></tr></thead><tbody id="recentAppointmentsTable"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -753,7 +753,7 @@ function renderSelectedLead() {
   const la = appointments.filter(a => a.lead_id === selectedLead.id).sort((a,b) => new Date(b.appointment_date||0)-new Date(a.appointment_date||0));
   const ls = sales.filter(s => s.lead_id === selectedLead.id).sort((a,b) => new Date(b.sale_date||0)-new Date(a.sale_date||0));
   leadCalls.innerHTML = lc.map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessuna chiamata.</td></tr>`;
-  leadApps.innerHTML = la.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessun appuntamento.</td></tr>`;
+  leadApps.innerHTML = la.map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessun appuntamento.</td></tr>`;
   leadSales.innerHTML = ls.map(s => `<tr><td>${fmtDate(s.sale_date)}</td><td>${saleItemsLabel(s)}</td><td>${money(saleCommission(s))}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Nessuna vendita.</td></tr>`;
 }
 
@@ -762,7 +762,7 @@ function renderDashboardLists() {
   const todayApps = appointments.filter(a => localDateKey(a.appointment_date) === today).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
   document.getElementById("todayAppointmentsBox").innerHTML = todayApps.map(a => {
     const l = leadById(a.lead_id);
-    return `<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(l?.name || "")}</strong><div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div></div><button class="small good" onclick="openSaleModal('${a.lead_id}', '${a.id}')">Vendita</button></div>`;
+    return `<div class="task"><span class="pill blue">${fmtTime(a.appointment_date)}</span><div style="flex:1"><strong>${escapeHtml(l?.name || "")}</strong><div class="mini">${escapeHtml(a.type || "")} • ${escapeHtml(a.place || "")} • ${escapeHtml(a.outcome || "")}</div></div><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button><button class="small good" onclick="openSaleModal('${a.lead_id}', '${a.id}')">Vendita</button></div>`;
   }).join("") || `<p class="muted">Nessun appuntamento oggi.</p>`;
 
   const allDue = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status));
@@ -778,7 +778,7 @@ function renderDashboardLists() {
 }
 function renderActivities() {
   document.getElementById("recentCallsTable").innerHTML = calls.slice(0,30).map(c => `<tr><td>${fmtDateTime(c.call_date)}</td><td>${escapeHtml(leadNameById(c.lead_id))}</td><td>${escapeHtml(c.outcome || "")}</td><td>${escapeHtml(c.notes || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessuna chiamata.</td></tr>`;
-  document.getElementById("recentAppointmentsTable").innerHTML = appointments.slice(0,30).map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nessun appuntamento.</td></tr>`;
+  document.getElementById("recentAppointmentsTable").innerHTML = appointments.slice(0,30).map(a => `<tr><td>${fmtDateTime(a.appointment_date)}</td><td>${escapeHtml(leadNameById(a.lead_id))}</td><td>${escapeHtml(a.outcome || "")}</td><td>${escapeHtml(a.place || "")}</td><td><button class="small ghost" onclick="openAppointmentEditModal('${a.id}')">Apri</button></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nessun appuntamento.</td></tr>`;
 }
 function renderSalesPanel() {
   const month = todayISODate().slice(0,7);
@@ -828,7 +828,7 @@ function renderCalendar() {
     if (!day) return `<div class="cal-day mutedday"></div>`;
     const key = localDateKey(day);
     const events = appointments.filter(a => localDateKey(a.appointment_date) === key).sort((a,b)=>new Date(a.appointment_date)-new Date(b.appointment_date));
-    return `<div class="cal-day"><div class="cal-date">${day.getDate()}</div>${events.map(a => `<span class="cal-event" onclick="selectLead('${a.lead_id}')">${fmtTime(a.appointment_date)} • ${escapeHtml(leadNameById(a.lead_id))}<br>${escapeHtml(a.outcome || "")}</span>`).join("")}</div>`;
+    return `<div class="cal-day"><div class="cal-date">${day.getDate()}</div>${events.map(a => `<span class="cal-event" onclick="openAppointmentEditModal('${a.id}')">${fmtTime(a.appointment_date)} • ${escapeHtml(leadNameById(a.lead_id))}<br>${escapeHtml(a.outcome || "")}</span>`).join("")}</div>`;
   }).join("");
 }
 function calendarPrev(){ calendarCursor.setMonth(calendarCursor.getMonth()-1); renderCalendar(); }
@@ -992,6 +992,78 @@ async function saveAppointmentFromModal(leadId) {
   selectLead(leadId);
   toast("Appuntamento salvato");
   if (openSale) openSaleModal(leadId, app.id);
+}
+
+
+function datetimeLocalFromIso(value) {
+  if (!value) return nowLocalInput();
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return nowLocalInput();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
+}
+
+function openAppointmentEditModal(appId) {
+  const app = appointments.find(a => a.id === appId);
+  if (!app) return toast("Appuntamento non trovato");
+  const l = leadById(app.lead_id);
+  selectedLead = l || selectedLead;
+  const outcomes = ["Da fare","Effettuato positivo","Venduto","Rinviato","Perso","Non presentato","Documenti mancanti"];
+  const types = ["In ufficio","Telefonico","Videochiamata","Dal cliente"];
+  openModal("Apri / aggiorna appuntamento", `
+    <div class="notice"><strong>${escapeHtml(l?.name || "Lead")}</strong><br>${escapeHtml(l?.phone || "")} • ${escapeHtml(l?.customer_id || "")}</div>
+    <div class="form-grid" style="margin-top:12px">
+      <div><label>Data/ora</label><input id="eAppDate" type="datetime-local" value="${datetimeLocalFromIso(app.appointment_date)}"></div>
+      <div><label>Tipo</label><select id="eAppType">${types.map(t => `<option ${t === (app.type || "") ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></div>
+      <div class="span2"><label>Luogo</label><input id="eAppPlace" value="${escapeHtml(app.place || "")}"></div>
+      <div><label>Esito appuntamento</label><select id="eAppOutcome" onchange="autoEditAppOutcome()">${outcomes.map(o => `<option ${o === (app.outcome || "") ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select></div>
+      <div><label>Nuovo follow-up</label><input id="eAppNext" type="datetime-local" value="${app.next_follow_up ? datetimeLocalFromIso(app.next_follow_up) : ""}"></div>
+      <div class="span4"><label><input id="eAppOpenSale" type="checkbox" style="width:auto" ${app.outcome === "Venduto" ? "checked" : ""}> Se esito Venduto, apri vendita dopo il salvataggio</label></div>
+      <div class="span4"><label>Note appuntamento</label><textarea id="eAppNotes">${escapeHtml(app.notes || "")}</textarea></div>
+      <div class="span4 row">
+        <button class="brand" onclick="saveAppointmentUpdate('${app.id}')">Salva aggiornamento appuntamento</button>
+        <button class="good" onclick="saveAppointmentUpdate('${app.id}', true)">Salva e apri vendita</button>
+        <button class="ghost" onclick="closeModal()">Annulla</button>
+      </div>
+    </div>
+  `);
+}
+
+function autoEditAppOutcome() {
+  const outcome = document.getElementById("eAppOutcome").value;
+  if (outcome === "Venduto") document.getElementById("eAppOpenSale").checked = true;
+}
+
+function statusFromAppointmentOutcome(outcome) {
+  if (outcome === "Venduto") return "Venduto";
+  if (outcome === "Effettuato positivo") return "Proposta inviata";
+  if (outcome === "Perso" || outcome === "Non presentato") return "Perso";
+  if (outcome === "Rinviato" || outcome === "Documenti mancanti") return "Interessato";
+  if (outcome === "Da fare") return "Appuntamento fissato";
+  return "";
+}
+
+async function saveAppointmentUpdate(appId, forceSale=false) {
+  const app = appointments.find(a => a.id === appId);
+  if (!app) return toast("Appuntamento non trovato");
+  const patch = {
+    appointment_date: toIsoOrNull(document.getElementById("eAppDate").value),
+    type: document.getElementById("eAppType").value,
+    place: document.getElementById("eAppPlace").value.trim(),
+    outcome: document.getElementById("eAppOutcome").value,
+    next_follow_up: toIsoOrNull(document.getElementById("eAppNext").value),
+    notes: document.getElementById("eAppNotes").value.trim()
+  };
+  const { error } = await sb.from("appointments").update(patch).eq("id", appId);
+  if (error) return toast(error.message);
+  await updateLeadAfterActivity(app.lead_id, statusFromAppointmentOutcome(patch.outcome), patch.next_follow_up || patch.appointment_date);
+  closeModal();
+  await refreshAll();
+  selectLead(app.lead_id);
+  toast("Appuntamento aggiornato");
+  if (forceSale || (patch.outcome === "Venduto" && document.getElementById("eAppOpenSale")?.checked)) {
+    openSaleModal(app.lead_id, appId);
+  }
 }
 
 function openSaleModal(leadId=null, appointmentId=null) {
