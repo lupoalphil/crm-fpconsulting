@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CRM F.P. Consulting v19 Operativa</title>
+  <title>CRM F.P. Consulting v20 Operativa</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -193,7 +193,7 @@
       <div class="logo">
         <div class="mark">FP</div>
         <div>
-          <div>CRM F.P. Consulting v19 Operativa</div>
+          <div>CRM F.P. Consulting v20 Operativa</div>
           <div class="sub">Dashboard, lead, calendario, vendite, provvigioni, privacy importi e flussi commerciali</div>
         </div>
       </div>
@@ -416,7 +416,8 @@ let sales = [];
 let saleItems = [];
 let commissionSettings = {};
 let selectedLead = null;
-let leadLimit = 80;
+let leadLimit = 2000;
+let totalLeadCount = 0;
 let calendarCursor = new Date();
 let hideMoney = localStorage.getItem("crm_hide_money") === "1";
 
@@ -555,7 +556,7 @@ function renderMoneyButtons() {
 async function refreshAll() {
   if (!currentUser) return;
   const [leadRes, callRes, appRes, saleRes, itemRes, commRes] = await Promise.all([
-    sb.from("leads").select("*").order("created_at", { ascending:false }).limit(leadLimit),
+    sb.from("leads").select("*", { count:"exact" }).order("created_at", { ascending:false }).limit(leadLimit),
     sb.from("calls").select("*").order("call_date", { ascending:false }).limit(300),
     sb.from("appointments").select("*").order("appointment_date", { ascending:false }).limit(300),
     sb.from("sales").select("*").order("sale_date", { ascending:false }).limit(300),
@@ -566,6 +567,7 @@ async function refreshAll() {
     if (res.error) return toast(res.error.message);
   }
   leads = leadRes.data || [];
+  totalLeadCount = leadRes.count ?? leads.length;
   calls = callRes.data || [];
   appointments = appRes.data || [];
   sales = saleRes.data || [];
@@ -627,7 +629,7 @@ function renderKpis() {
   const due = leads.filter(l => l.next_follow_up && new Date(l.next_follow_up) <= new Date() && !["Venduto","Perso","Non interessato"].includes(l.status)).length;
   const commMonth = salesMonth.reduce((sum,s) => sum + saleCommission(s), 0);
   const kpis = [
-    ["Lead caricati", leads.length, "visibili ora"],
+    ["Lead caricati", totalLeadCount, leads.length < totalLeadCount ? `${leads.length} caricati per ricerca` : "totali online"],
     ["Chiamate oggi", callsToday, "attività giornaliera"],
     ["Appuntamenti oggi", appsToday, "agenda"],
     ["Follow-up scaduti", due, "da lavorare"],
@@ -698,7 +700,7 @@ function renderLeadTable() {
   document.getElementById("leadTable").innerHTML = rows || `<tr><td colspan="7" class="muted">Nessun lead.</td></tr>`;
 }
 function loadMoreLeads() {
-  leadLimit += 200;
+  leadLimit += 500;
   refreshAll();
 }
 function statusPill(status) {
